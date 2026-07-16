@@ -1,0 +1,71 @@
+/**
+ * 优雅 — 随笔感，标题描边 + 斜体引用
+ */
+.article h1 {
+  padding: 0.4em 0.6em 0.55em;
+  border-bottom: 2px solid {{PRIMARY}};
+  font-size: 1.5em;
+  font-weight: bold;
+  color: {{PRIMARY}};
+  text-align: center;
+  margin: 1.3em 0 1em;
+  letter-spacing: 0.12em;
+}
+
+.article h2 {
+  padding: 0.4em 0.9em;
+  border-radius: 10px;
+  font-size: 1.25em;
+  font-weight: bold;
+  color: {{PRIMARY}};
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+  margin: 1.4em 0 0.9em;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.article h3 {
+  padding-left: 12px;
+  font-size: 1.12em;
+  font-weight: bold;
+  color: #333333;
+  border-left: 4px solid {{PRIMARY}};
+  border-bottom: 1px dashed {{PRIMARY}};
+  margin: 1.2em 0 0.7em;
+  line-height: 1.7;
+}
+
+.article h4,
+.article h5,
+.article h6 {
+  font-size: 1em;
+  font-weight: bold;
+  color: {{PRIMARY}};
+  margin: 1em 0 0.5em;
+}
+
+.article p {
+  margin: 0 0 1.15em;
+  letter-spacing: 0.05em;
+  color: #444444;
+}
+
+.article blockquote {
+  font-style: italic;
+  padding: 1em 1.15em;
+  border-left: 4px solid {{PRIMARY}};
+  border-radius: 8px;
+  color: rgba(0, 0, 0, 0.55);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  margin: 1.2em 0;
+  background: #fafafa;
+}
+
+.article blockquote p {
+  margin: 0;
+}
+
+.article img {
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}

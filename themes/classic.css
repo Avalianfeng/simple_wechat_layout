@@ -1,0 +1,70 @@
+/**
+ * 经典 — 色块二级标题，视觉反差大
+ */
+.article h1 {
+  display: table;
+  padding: 0.15em 1em 0.35em;
+  border-bottom: 3px solid {{PRIMARY}};
+  margin: 1.6em auto 1.1em;
+  color: #222222;
+  font-size: 1.45em;
+  font-weight: bold;
+  text-align: center;
+  letter-spacing: 0.08em;
+}
+
+.article h2 {
+  display: table;
+  padding: 0.35em 1em;
+  margin: 1.8em auto 1em;
+  color: #ffffff;
+  background: {{PRIMARY}};
+  font-size: 1.2em;
+  font-weight: bold;
+  text-align: center;
+  border-radius: 6px;
+  letter-spacing: 0.06em;
+}
+
+.article h3 {
+  padding-left: 10px;
+  border-left: 4px solid {{PRIMARY}};
+  margin: 1.5em 0 0.7em;
+  color: #222222;
+  font-size: 1.1em;
+  font-weight: bold;
+}
+
+.article h4,
+.article h5,
+.article h6 {
+  margin: 1.2em 0 0.5em;
+  color: {{PRIMARY}};
+  font-size: 1em;
+  font-weight: bold;
+}
+
+.article p {
+  margin: 0 0 1.15em;
+  letter-spacing: 0.06em;
+  color: #333333;
+}
+
+.article blockquote {
+  font-style: normal;
+  padding: 1em 1.1em;
+  border-left: 4px solid {{PRIMARY}};
+  border-radius: 0 8px 8px 0;
+  color: #555555;
+  background: #f3f6f4;
+  margin: 1.2em 0;
+}
+
+.article blockquote p {
+  margin: 0;
+  color: #555555;
+}
+
+.article img {
+  border-radius: 4px;
+}

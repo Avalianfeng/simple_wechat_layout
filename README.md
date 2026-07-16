@@ -4,10 +4,10 @@
 
 ## 做什么
 
-1. 任意文本（无格式或半 Markdown）**一律**经 DeepSeek 整理成干净 Markdown  
-2. 本地渲染为带内联样式的 HTML（借 doocs/md 的 simple 主题思路）  
-3. 预览 + 一键复制到微信编辑器  
-4. 图片可上传到本站供预览；粘贴进公众号后需在后台手动插图（微信不认外链图）
+1. 任意文本（无格式或半 Markdown）**一律**经 DeepSeek 整理成干净 Markdown（锁定保存）  
+2. 本地渲染：主题 + 配色 + **字体 / 字号** + 缩进（借 doocs/md）  
+3. 换样式只走 `/api/render`，**不重新调用 AI**  
+4. 预览 + 一键复制到微信（外链图换成【图N】）  
 
 ## 本地运行
 
@@ -30,15 +30,21 @@ npm start
 | `DEEPSEEK_API_KEY` | 必填，服务端使用，网页不暴露配置 |
 | `DEEPSEEK_BASE_URL` | 默认 `https://api.deepseek.com` |
 | `DEEPSEEK_MODEL` | 默认 `deepseek-chat` |
+| `DEEPSEEK_CONNECT_TIMEOUT_MS` | TCP 建连超时，默认 `30000`（Node 默认仅 10s，慢网易误报） |
+| `DEEPSEEK_RETRY_TIMES` | 网络类错误自动重试次数，默认 `1`（共 2 次请求） |
 | `PORT` | 默认 `3080` |
 | `PUBLIC_BASE_URL` | 公网根地址，用于上传图片绝对 URL；本地可留空 |
 
 ## API
 
+- `GET /api/options` — 主题 / 配色默认项  
 - `POST /api/upload` — `multipart` 字段名 `images` → `{ images: [{ filename, url }] }`  
-- `POST /api/convert` — `{ text, imageUrls[] }` → `{ markdown, html, images }`  
+- `POST /api/convert` — `{ text, imageUrls[], style }` → `{ markdown, html, images, style }`  
+- `POST /api/render` — `{ markdown, style }` → 换肤重渲染（不调 AI）  
 - `GET /uploads/:file` — 已上传图片  
 - `GET /api/health` — 健康检查  
+
+`style` 字段：`{ theme, primaryColor, fontFamily, fontSize, indent, justify }`
 
 ## 部署（cylf.me / aeris）
 

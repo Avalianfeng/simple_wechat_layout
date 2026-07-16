@@ -10,11 +10,17 @@
   <main class="page">
     <header class="header">
       <h1>公众号排版助手</h1>
-      <p class="subtitle">写好文字 → 点一下整理 → 复制到微信后台</p>
+      <p class="subtitle">先整理文字（AI 一次）→ 再随意换排版（不重新整理）→ 复制到微信</p>
     </header>
 
     <section class="card">
-      <label class="label" for="text">把文章写在这里</label>
+      <div class="input-mode" role="tablist" aria-label="输入方式">
+        <button type="button" class="mode-btn active" data-mode="text" role="tab" aria-selected="true">普通文字</button>
+        <button type="button" class="mode-btn" data-mode="markdown" role="tab" aria-selected="false">已有 Markdown</button>
+      </div>
+      <p id="modeHint" class="hint tiny">普通文字会由 AI 整理一次；已有 Markdown 不调用 AI，直接排版预览。</p>
+
+      <label class="label" for="text" id="textLabel">把文章写在这里</label>
       <textarea
         id="text"
         rows="12"
@@ -32,11 +38,39 @@
         <ul id="thumbList" class="thumb-list" hidden></ul>
       </div>
 
-      <button id="convertBtn" type="button" class="btn btn-primary">整理并预览</button>
+      <button id="convertBtn" type="button" class="btn btn-primary">整理文字</button>
       <p id="status" class="status" role="status" aria-live="polite"></p>
     </section>
 
     <section id="resultSection" class="card result" hidden>
+      <fieldset class="style-panel">
+        <legend class="label">排版样式（改这里只换样子，文字已保存）</legend>
+
+        <p class="field-label">主题</p>
+        <div id="themeGroup" class="choice-row" role="radiogroup" aria-label="主题"></div>
+
+        <p class="field-label">颜色</p>
+        <div id="colorGroup" class="choice-row colors" role="radiogroup" aria-label="颜色"></div>
+
+        <p class="field-label">字体</p>
+        <div id="fontGroup" class="choice-row" role="radiogroup" aria-label="字体"></div>
+
+        <p class="field-label">字号</p>
+        <div id="sizeGroup" class="choice-row sizes" role="radiogroup" aria-label="字号"></div>
+
+        <div class="toggles">
+          <label class="check">
+            <input type="checkbox" id="indentToggle" />
+            首行缩进
+          </label>
+          <label class="check">
+            <input type="checkbox" id="justifyToggle" />
+            两端对齐
+          </label>
+        </div>
+        <p id="styleStatus" class="hint tiny" hidden></p>
+      </fieldset>
+
       <div class="result-actions">
         <button id="copyBtn" type="button" class="btn btn-primary">复制到微信</button>
       </div>
@@ -47,12 +81,12 @@
 
       <div id="insertGuide" class="insert-guide" hidden>
         <h2 class="section-title">粘贴后请按顺序插入这些图</h2>
-        <p class="hint">微信不能直接用我们网站上的图片链接，需要在公众号后台手动插入。</p>
+        <p class="hint">微信不能直接用我们网站上的图片。复制时正文里会留下「【图1】【图2】」标记，方便你对照插入。</p>
         <ol id="insertList" class="insert-list"></ol>
       </div>
 
       <details class="advanced">
-        <summary>查看整理后的文字（一般不用看）</summary>
+        <summary>查看整理后的文字（已锁定，换样式不会改它）</summary>
         <pre id="markdownOut" class="markdown-out"></pre>
       </details>
     </section>
