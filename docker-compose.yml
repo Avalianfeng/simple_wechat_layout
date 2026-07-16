@@ -20,7 +20,7 @@ services:
       PORT: "3080"
       PUBLIC_BASE_URL: "https://wxlayout.cylf.me"
     volumes:
-      - ./data/uploads:/app/data/uploads
+      - ./data:/app/data
     networks:
       - proxy
     deploy:

@@ -20,10 +20,36 @@ import {
   DEFAULT_STYLE,
 } from './themes.js'
 import { Agent } from 'undici'
+import { initDb, defaultDailyAiLimit, getRegisterInviteCode, registerPerIpPerDay } from './db.js'
+import {
+  registerUser,
+  loginUser,
+  createSession,
+  destroySession,
+  changePassword,
+  getSessionToken,
+  setSessionCookie,
+  clearSessionCookie,
+  requireUser,
+  publicUser,
+} from './auth.js'
+import {
+  assertCanConvert,
+  insertUsageLog,
+  listUsageForUser,
+  formatYuanFromLi,
+  estimateCostLi,
+  estimateChunks,
+  getTokenPrices,
+  getQuotaState,
+} from './usage.js'
+import { requireAdmin, listUsersAdmin, patchUserAdmin, getAdminToken } from './admin.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const publicDir = path.join(__dirname, '..', 'public')
 const PORT = Number(process.env.PORT) || 3080
+
+initDb()
 
 const app = express()
 app.use(express.json({ limit: '2mb' }))
@@ -32,6 +58,9 @@ app.use('/uploads', express.static(uploadsDir, {
   maxAge: '7d',
   fallthrough: false,
 }))
+
+/** @type {Map<number, boolean>} */
+const convertInFlight = new Map()
 
 function publicBase(req) {
   const envBase = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '')
@@ -52,6 +81,20 @@ function buildResult(markdown, style) {
   }
 }
 
+function clientIp(req) {
+  const xf = req.get('x-forwarded-for')
+  if (xf) return xf.split(',')[0].trim()
+  return req.ip || req.socket?.remoteAddress || 'unknown'
+}
+
+function mePayload(user) {
+  return {
+    user: publicUser(user),
+    quota: getQuotaState(user),
+    prices: getTokenPrices(),
+  }
+}
+
 /** @type {Agent | null} */
 let deepSeekProbeDispatcher = null
 
@@ -63,7 +106,6 @@ function getDeepSeekProbeDispatcher() {
   return deepSeekProbeDispatcher
 }
 
-/** 探测 DeepSeek 可达性（不消耗 chat token） */
 async function probeDeepSeek(timeoutMs) {
   const { baseUrl, hasKey, connectTimeoutMs } = getDeepSeekConfig()
   const probeTimeoutMs = timeoutMs || Math.max(connectTimeoutMs + 5_000, 15_000)
@@ -100,6 +142,8 @@ app.get('/api/health', async (req, res) => {
   const body = {
     ok: true,
     hasDeepSeekKey: cfg.hasKey,
+    hasAdminToken: Boolean(getAdminToken()),
+    defaultDailyAiLimit: defaultDailyAiLimit(),
     deepSeek: {
       baseUrl: cfg.baseUrl,
       model: cfg.model,
@@ -123,13 +167,89 @@ app.get('/api/options', (_req, res) => {
     defaults: DEFAULT_STYLE,
     limits: {
       maxChars: limits.maxChars,
+      chunkChars: limits.chunkChars,
       baseTimeoutMs: limits.baseTimeoutMs,
       maxTimeoutMs: limits.maxTimeoutMs,
+    },
+    defaultDailyAiLimit: defaultDailyAiLimit(),
+    register: {
+      inviteRequired: Boolean(getRegisterInviteCode()),
+      perIpPerDay: registerPerIpPerDay(),
+    },
+    support: {
+      wechat: process.env.SUPPORT_WECHAT || process.env.SUPPORT_CONTACT || 'cylf_19956272658',
+      contact: process.env.SUPPORT_CONTACT || process.env.SUPPORT_WECHAT || '',
+      payQrUrl: '/pay-qr.png',
+      wechatQrUrl: '/wechat-qr.png',
     },
   })
 })
 
-app.post('/api/upload', (req, res) => {
+/* ---------- auth ---------- */
+
+app.post('/api/auth/register', (req, res) => {
+  try {
+    const user = registerUser(req.body?.username, req.body?.password, {
+      inviteCode: req.body?.inviteCode,
+      ip: clientIp(req),
+    })
+    const session = createSession(user.id)
+    setSessionCookie(res, session.token, session.expiresAt)
+    res.json(mePayload(user))
+  }
+  catch (e) {
+    const status = e.code === 'USERNAME_TAKEN' ? 409
+      : e.code === 'REGISTER_IP_LIMIT' ? 429
+        : e.code === 'BAD_INVITE' || e.code === 'BAD_USERNAME' || e.code === 'BAD_PASSWORD' ? 400
+          : 400
+    res.status(status).json({ error: e.message || '注册失败', code: e.code || 'UNKNOWN' })
+  }
+})
+
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const user = loginUser(req.body?.username, req.body?.password)
+    const session = createSession(user.id)
+    setSessionCookie(res, session.token, session.expiresAt)
+    res.json(mePayload(user))
+  }
+  catch (e) {
+    const status = e.code === 'DISABLED' ? 403 : 401
+    res.status(status).json({ error: e.message || '登录失败', code: e.code || 'UNKNOWN' })
+  }
+})
+
+app.post('/api/auth/logout', (req, res) => {
+  destroySession(getSessionToken(req))
+  clearSessionCookie(res)
+  res.json({ ok: true })
+})
+
+app.post('/api/auth/password', requireUser, (req, res) => {
+  try {
+    changePassword(req.user.id, req.body?.oldPassword, req.body?.newPassword)
+    res.json({ ok: true })
+  }
+  catch (e) {
+    const status = e.code === 'BAD_CREDENTIALS' ? 401 : 400
+    res.status(status).json({ error: e.message || '修改失败', code: e.code || 'UNKNOWN' })
+  }
+})
+
+app.get('/api/me', requireUser, (req, res) => {
+  res.json(mePayload(req.user))
+})
+
+app.get('/api/me/usage', requireUser, (req, res) => {
+  const limit = Number(req.query.limit) || 20
+  const offset = Number(req.query.offset) || 0
+  res.json({
+    items: listUsageForUser(req.user.id, { limit, offset }),
+    quota: getQuotaState(req.user),
+  })
+})
+
+app.post('/api/upload', requireUser, (req, res) => {
   uploadMiddleware.array('images', 12)(req, res, (err) => {
     if (err) {
       res.status(400).json({ error: err.message || '上传失败' })
@@ -149,35 +269,82 @@ app.post('/api/upload', (req, res) => {
   })
 })
 
-app.post('/api/convert', async (req, res) => {
+app.post('/api/convert', requireUser, async (req, res) => {
   const started = Date.now()
+  const userId = req.user.id
+  const text = typeof req.body?.text === 'string' ? req.body.text : ''
+  const imageUrls = Array.isArray(req.body?.imageUrls)
+    ? req.body.imageUrls.filter((u) => typeof u === 'string' && u.trim())
+    : []
+  const style = normalizeStyle(req.body?.style || req.body)
+
+  if (convertInFlight.get(userId)) {
+    res.status(429).json({ error: '正在整理中，请稍候', code: 'IN_FLIGHT' })
+    return
+  }
+
   try {
-    const text = typeof req.body?.text === 'string' ? req.body.text : ''
-    const imageUrls = Array.isArray(req.body?.imageUrls)
-      ? req.body.imageUrls.filter((u) => typeof u === 'string' && u.trim())
-      : []
-    const style = normalizeStyle(req.body?.style || req.body)
+    assertCanConvert(req.user)
+  }
+  catch (e) {
+    const status = e.code === 'QUOTA_EXCEEDED' || e.code === 'QUOTA_ZERO' || e.code === 'AI_DISABLED'
+      ? 403
+      : 401
+    res.status(status).json({ error: e.message, code: e.code, quota: getQuotaState(req.user) })
+    return
+  }
 
-    if (!text.trim() && imageUrls.length === 0) {
-      res.status(400).json({ error: '请先写一点文字，或上传图片' })
-      return
-    }
+  if (!text.trim() && imageUrls.length === 0) {
+    res.status(400).json({ error: '请先写一点文字，或上传图片' })
+    return
+  }
 
-    const markdown = await convertToMarkdown({
+  convertInFlight.set(userId, true)
+  try {
+    const converted = await convertToMarkdown({
       text,
       imageUrls,
       theme: style.theme,
     })
-    const result = buildResult(markdown, style)
+    const cost = insertUsageLog({
+      userId,
+      promptTokens: converted.usage?.prompt_tokens,
+      completionTokens: converted.usage?.completion_tokens,
+      textChars: text.length,
+      chunks: converted.chunks,
+      retries: converted.retries,
+      status: 'ok',
+    })
+    const result = buildResult(converted.markdown, style)
+    const quota = getQuotaState(req.user)
     console.log('[api/convert] done', {
       ms: Date.now() - started,
+      userId,
       theme: style.theme,
-      markdownChars: markdown.length,
-      imageCount: result.images.length,
+      markdownChars: converted.markdown.length,
+      usage: converted.usage,
+      chunks: converted.chunks,
     })
-    res.json(result)
+    res.json({
+      ...result,
+      usage: converted.usage,
+      chunks: converted.chunks,
+      retries: converted.retries,
+      estimatedCost: cost.estimatedCost,
+      quota,
+    })
   }
   catch (e) {
+    insertUsageLog({
+      userId,
+      promptTokens: e.usage?.prompt_tokens,
+      completionTokens: e.usage?.completion_tokens,
+      textChars: text.length,
+      chunks: e.chunks || estimateChunks(text.length),
+      retries: e.retries || 0,
+      status: 'fail',
+      errorCode: e.code || 'UNKNOWN',
+    })
     const status = e.code === 'NO_API_KEY'
       ? 503
       : e.code === 'TEXT_TOO_LONG'
@@ -187,6 +354,7 @@ app.post('/api/convert', async (req, res) => {
           : 502
     console.error('[api/convert] fail', {
       ms: Date.now() - started,
+      userId,
       code: e.code || 'UNKNOWN',
       message: e.message,
       chain: describeErrorChain(e),
@@ -194,12 +362,20 @@ app.post('/api/convert', async (req, res) => {
     res.status(status).json({
       error: e.message || '整理失败',
       code: e.code || 'UNKNOWN',
+      usage: e.usage || null,
+      estimatedCost: e.usage
+        ? formatYuanFromLi(estimateCostLi(e.usage))
+        : null,
+      quota: getQuotaState(req.user),
     })
+  }
+  finally {
+    convertInFlight.delete(userId)
   }
 })
 
-/** 已有 Markdown，仅渲染（不调 AI）；可附带 imageUrls 自动补图 */
-app.post('/api/render', (req, res) => {
+/** 已有 Markdown，仅渲染（不调 AI） */
+app.post('/api/render', requireUser, (req, res) => {
   try {
     let markdown = typeof req.body?.markdown === 'string' ? req.body.markdown : ''
     const imageUrls = Array.isArray(req.body?.imageUrls)
@@ -215,6 +391,7 @@ app.post('/api/render', (req, res) => {
     const style = normalizeStyle(req.body?.style || req.body)
     const result = buildResult(markdown, style)
     console.log('[api/render] ok', {
+      userId: req.user.id,
       theme: style.theme,
       markdownChars: markdown.length,
     })
@@ -229,6 +406,32 @@ app.post('/api/render', (req, res) => {
   }
 })
 
+/* ---------- admin ---------- */
+
+app.get('/api/admin/users', requireAdmin, (_req, res) => {
+  res.json({ users: listUsersAdmin() })
+})
+
+app.patch('/api/admin/users/:id', requireAdmin, (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    if (!Number.isInteger(id) || id < 1) {
+      res.status(400).json({ error: '无效用户 id' })
+      return
+    }
+    const user = patchUserAdmin(id, {
+      aiEnabled: req.body?.aiEnabled,
+      dailyAiLimit: req.body?.dailyAiLimit,
+      status: req.body?.status,
+    })
+    res.json({ user })
+  }
+  catch (e) {
+    const status = e.code === 'NOT_FOUND' ? 404 : 400
+    res.status(status).json({ error: e.message || '更新失败', code: e.code || 'UNKNOWN' })
+  }
+})
+
 app.listen(PORT, async () => {
   const cfg = getDeepSeekConfig()
   console.log(`simple-wechat-layout listening on http://127.0.0.1:${PORT}`)
@@ -238,14 +441,23 @@ app.listen(PORT, async () => {
     hasKey: cfg.hasKey,
     keyLength: cfg.keyLength,
   })
+  console.log('[startup] auth', {
+    defaultDailyAiLimit: defaultDailyAiLimit(),
+    hasAdminToken: Boolean(getAdminToken()),
+  })
   if (!cfg.hasKey) {
     console.warn('警告: 未设置 DEEPSEEK_API_KEY，/api/convert 将不可用')
-    return
   }
-  const probe = await probeDeepSeek()
-  if (probe.ok) {
-    console.log('[startup] deepseek probe ok', { ms: probe.ms, status: probe.status })
-  } else {
-    console.warn('[startup] deepseek probe failed', probe)
+  else {
+    const probe = await probeDeepSeek()
+    if (probe.ok) {
+      console.log('[startup] deepseek probe ok', { ms: probe.ms, status: probe.status })
+    }
+    else {
+      console.warn('[startup] deepseek probe failed', probe)
+    }
+  }
+  if (!getAdminToken()) {
+    console.warn('警告: 未设置 ADMIN_TOKEN，管理后台将不可用')
   }
 })

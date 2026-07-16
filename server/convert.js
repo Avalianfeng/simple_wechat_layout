@@ -190,9 +190,21 @@ async function convertChunk(input) {
 }
 
 /**
+ * @param {{ prompt_tokens?: number, completion_tokens?: number, total_tokens?: number } | null} a
+ * @param {{ prompt_tokens?: number, completion_tokens?: number, total_tokens?: number } | null} b
+ */
+function addUsage(a, b) {
+  return {
+    prompt_tokens: (Number(a?.prompt_tokens) || 0) + (Number(b?.prompt_tokens) || 0),
+    completion_tokens: (Number(a?.completion_tokens) || 0) + (Number(b?.completion_tokens) || 0),
+    total_tokens: (Number(a?.total_tokens) || 0) + (Number(b?.total_tokens) || 0),
+  }
+}
+
+/**
  * 一律经 DeepSeek 规范化为 Markdown（长文自动分段 + 动态超时）
  * @param {{ text: string, imageUrls?: string[], theme?: string }} input
- * @returns {Promise<string>}
+ * @returns {Promise<{ markdown: string, usage: object, chunks: number, retries: number }>}
  */
 export async function convertToMarkdown({ text, imageUrls = [], theme } = {}) {
   const apiKey = process.env.DEEPSEEK_API_KEY
@@ -220,6 +232,10 @@ export async function convertToMarkdown({ text, imageUrls = [], theme } = {}) {
     chunks: chunks.length,
   })
 
+  /** @type {{ prompt_tokens: number, completion_tokens: number, total_tokens: number }} */
+  let usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+  let retries = 0
+
   try {
     const parts = []
     const imagesForAi = chunks.length === 1 ? imageUrls : []
@@ -233,9 +249,11 @@ export async function convertToMarkdown({ text, imageUrls = [], theme } = {}) {
         chunkIndex: i + 1,
         chunkTotal: chunks.length,
       })
+      usage = addUsage(usage, result.usage)
 
       if (looksOverEdited(chunk, result.markdown)) {
         console.warn('[convert] over-edited, retry chunk', { chunk: i + 1 })
+        retries += 1
         result = await convertChunk({
           text: chunk,
           imageUrls: i === 0 ? imagesForAi : [],
@@ -244,9 +262,13 @@ export async function convertToMarkdown({ text, imageUrls = [], theme } = {}) {
           chunkTotal: chunks.length,
           isRetry: true,
         })
+        usage = addUsage(usage, result.usage)
         if (looksOverEdited(chunk, result.markdown)) {
           const err = new Error('AI 疑似改动了原文内容，请改用「已有 Markdown」模式，或缩短后重试')
           err.code = 'OVER_EDITED'
+          err.usage = usage
+          err.chunks = chunks.length
+          err.retries = retries
           throw err
         }
       }
@@ -266,15 +288,29 @@ export async function convertToMarkdown({ text, imageUrls = [], theme } = {}) {
       model,
       markdownChars: markdown.length,
       chunks: chunks.length,
+      retries,
+      usage,
     })
 
-    return markdown
+    return { markdown, usage, chunks: chunks.length, retries }
   }
   catch (e) {
     const ms = Date.now() - started
+    if (e?.usage) {
+      /* already attached */
+    }
+    else {
+      e.usage = usage
+      e.chunks = chunks.length
+      e.retries = retries
+    }
+
     if (e?.name === 'AbortError') {
       const err = new Error(`整理超时（约 ${Math.round(timeoutMs / 1000)} 秒）。文章较长可改用「已有 Markdown」模式，或分段后再整理。`)
       err.code = 'TIMEOUT'
+      err.usage = usage
+      err.chunks = chunks.length
+      err.retries = retries
       console.error('[convert] timeout', { ms, timeoutMs })
       throw err
     }
@@ -284,6 +320,9 @@ export async function convertToMarkdown({ text, imageUrls = [], theme } = {}) {
       const err = new Error(`无法连接 DeepSeek (${baseUrl}): ${chain}`)
       err.code = 'DEEPSEEK_NETWORK'
       err.cause = e
+      err.usage = usage
+      err.chunks = chunks.length
+      err.retries = retries
       console.error('[convert] network', { ms, chain })
       throw err
     }

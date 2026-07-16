@@ -9,16 +9,32 @@
 <body>
   <main class="page">
     <header class="header">
-      <h1>公众号排版助手</h1>
-      <p class="subtitle">先整理文字（AI 一次）→ 再随意换排版（不重新整理）→ 复制到微信</p>
+      <div class="header-row">
+        <div>
+          <h1>公众号排版助手</h1>
+          <p class="subtitle">写好文字，点整理，再换样式，最后复制到微信</p>
+        </div>
+        <div class="auth-bar" id="authBar">
+          <span id="authSummary" class="auth-summary"></span>
+          <a class="link-btn" id="accountLink" href="/account.html" hidden>账户</a>
+          <button type="button" class="link-btn" id="loginOpenBtn">登录</button>
+          <button type="button" class="link-btn" id="logoutBtn" hidden>退出</button>
+        </div>
+      </div>
     </header>
 
-    <section class="card">
+    <section class="card" id="guestHint" hidden>
+      <p class="hint">登录后才能整理文字或预览排版。注册需邀请码；换主题不占用 AI 次数。</p>
+      <button type="button" class="btn btn-primary" id="guestLoginBtn">登录 / 注册</button>
+    </section>
+
+    <section class="card" id="editorCard">
       <div class="input-mode" role="tablist" aria-label="输入方式">
         <button type="button" class="mode-btn active" data-mode="text" role="tab" aria-selected="true">普通文字</button>
         <button type="button" class="mode-btn" data-mode="markdown" role="tab" aria-selected="false">已有 Markdown</button>
       </div>
-      <p id="modeHint" class="hint tiny">普通文字会由 AI 整理一次；已有 Markdown 不调用 AI，直接排版预览。</p>
+      <p id="modeHint" class="hint tiny">普通文字会由 AI 整理一次（占用今日额度）；已有 Markdown 不调用 AI。</p>
+      <p id="quotaHint" class="hint tiny" hidden></p>
 
       <label class="label" for="text" id="textLabel">把文章写在这里</label>
       <textarea
@@ -38,13 +54,15 @@
         <ul id="thumbList" class="thumb-list" hidden></ul>
       </div>
 
-      <button id="convertBtn" type="button" class="btn btn-primary">整理文字</button>
+      <div class="primary-actions">
+        <button id="convertBtn" type="button" class="btn btn-primary">整理文字</button>
+      </div>
       <p id="status" class="status" role="status" aria-live="polite"></p>
     </section>
 
     <section id="resultSection" class="card result" hidden>
       <fieldset class="style-panel">
-        <legend class="label">排版样式（改这里只换样子，文字已保存）</legend>
+        <legend class="label">排版样式（改这里只换样子，不占用 AI 次数）</legend>
 
         <p class="field-label">主题</p>
         <div id="themeGroup" class="choice-row" role="radiogroup" aria-label="主题"></div>
@@ -90,7 +108,74 @@
         <pre id="markdownOut" class="markdown-out"></pre>
       </details>
     </section>
+
+    <footer class="site-footer">
+      <section class="footer-block">
+        <h2 class="section-title">遇到问题？</h2>
+        <img
+          class="qr-img contact-qr"
+          src="/wechat-qr.png"
+          alt="微信联系二维码"
+          width="200"
+          onerror="this.classList.add('is-missing'); this.nextElementSibling.hidden=false"
+        />
+        <p class="hint tiny" hidden>请将「加我好友」二维码放到 public/wechat-qr.png</p>
+        <p class="wechat-id">
+          微信号
+          <strong id="wechatId">cylf_19956272658</strong>
+          <button type="button" class="link-btn" id="copyWechatBtn">复制</button>
+        </p>
+        <p class="hint tiny" id="copyWechatStatus" role="status"></p>
+      </section>
+
+      <section class="footer-block">
+        <h2 class="section-title">支持一下</h2>
+        <img
+          class="qr-img pay-qr"
+          src="/pay-qr.png"
+          alt="收款码"
+          width="200"
+          onerror="this.classList.add('is-missing'); this.nextElementSibling.hidden=false"
+        />
+        <p class="hint tiny" hidden>请将收款码图片放到 public/pay-qr.png</p>
+      </section>
+    </footer>
   </main>
+
+  <dialog id="authDialog" class="dialog">
+    <form method="dialog" id="authForm" class="dialog-body">
+      <h2 class="section-title" id="authTitle">登录</h2>
+      <div class="auth-tabs">
+        <button type="button" class="mode-btn active" data-auth="login">登录</button>
+        <button type="button" class="mode-btn" data-auth="register">注册</button>
+      </div>
+      <label class="label" for="authUsername">用户名</label>
+      <input id="authUsername" class="text-input" autocomplete="username" required />
+      <label class="label" for="authPassword">密码（至少 8 位）</label>
+      <input id="authPassword" type="password" class="text-input" autocomplete="current-password" required />
+      <div id="inviteField" hidden>
+        <label class="label" for="authInvite">邀请码</label>
+        <input id="authInvite" class="text-input" autocomplete="off" />
+      </div>
+      <p id="authError" class="status error" hidden></p>
+      <div class="dialog-actions">
+        <button type="submit" class="btn btn-primary" id="authSubmit">登录</button>
+        <button type="button" class="btn btn-secondary" id="authCancel">取消</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="confirmDialog" class="dialog">
+    <div class="dialog-body">
+      <h2 class="section-title">确认整理</h2>
+      <p id="confirmText" class="hint"></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-primary" id="confirmOk">开始整理</button>
+        <button type="button" class="btn btn-secondary" id="confirmCancel">取消</button>
+      </div>
+    </div>
+  </dialog>
+
   <script src="/app.js" type="module"></script>
 </body>
 </html>

@@ -1,7 +1,29 @@
-node_modules/
-data/uploads/*
-!data/uploads/.gitkeep
-.env
+# CodeGraph data files
+# These are local to each machine and should not be committed
+
+# Database
+*.db
+*.db-wal
+*.db-shm
+data/app.db
+data/app.db-*
+
+# Cache
+cache/
+
+# Logs
 *.log
-.DS_Store
-Thumbs.db
+
+# Hook markers
+.dirty
+
+# code graph
+.codegraph/
+
+# env
+.env
+node_modules/
+
+# editor / local
+.cursor/
+.mcp.json

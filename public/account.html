@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>我的账户 · 公众号排版助手</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="page">
+    <header class="header">
+      <p class="tiny"><a href="/">← 返回排版</a></p>
+      <h1>我的账户</h1>
+      <p class="subtitle" id="whoami">加载中…</p>
+    </header>
+
+    <section class="card" id="quotaCard">
+      <h2 class="section-title">今日 AI 额度</h2>
+      <p id="quotaText" class="hint">—</p>
+    </section>
+
+    <section class="card">
+      <h2 class="section-title">用量记录</h2>
+      <p class="hint tiny">仅作参考展示，本站不扣费。花费按 DeepSeek 公开价估算。</p>
+      <ul id="usageList" class="usage-list"></ul>
+      <p id="usageEmpty" class="hint" hidden>还没有整理记录。</p>
+    </section>
+
+    <section class="card">
+      <h2 class="section-title">修改密码</h2>
+      <label class="label" for="oldPassword">当前密码</label>
+      <input id="oldPassword" type="password" class="text-input" autocomplete="current-password" />
+      <label class="label" for="newPassword">新密码（至少 8 位）</label>
+      <input id="newPassword" type="password" class="text-input" autocomplete="new-password" />
+      <button type="button" id="pwdBtn" class="btn btn-secondary">保存新密码</button>
+      <p id="pwdStatus" class="status" role="status"></p>
+    </section>
+
+    <section class="card">
+      <button type="button" id="logoutBtn" class="btn btn-secondary">退出登录</button>
+    </section>
+  </main>
+  <script src="/account.js" type="module"></script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>管理 · 公众号排版助手</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="page">
+    <header class="header">
+      <p class="tiny"><a href="/">← 返回排版</a></p>
+      <h1>用户管理</h1>
+      <p class="subtitle">用 ADMIN_TOKEN 登录。可设日额度，或勾选「不限」。</p>
+    </header>
+
+    <section class="card" id="loginCard">
+      <label class="label" for="adminToken">管理员令牌</label>
+      <input id="adminToken" type="password" class="text-input" autocomplete="off" />
+      <button type="button" id="adminLoginBtn" class="btn btn-primary">进入</button>
+      <p id="adminLoginStatus" class="status" role="status"></p>
+    </section>
+
+    <section class="card" id="usersCard" hidden>
+      <div class="admin-toolbar">
+        <button type="button" id="refreshBtn" class="btn btn-secondary">刷新</button>
+        <button type="button" id="adminLogoutBtn" class="btn btn-secondary">退出管理</button>
+      </div>
+      <div class="table-wrap">
+        <table class="admin-table" id="usersTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>用户名</th>
+              <th>AI</th>
+              <th>日额度</th>
+              <th>今日</th>
+              <th>累计参考花费</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p id="adminStatus" class="status" role="status"></p>
+    </section>
+  </main>
+  <script src="/admin.js" type="module"></script>
+</body>
+</html>

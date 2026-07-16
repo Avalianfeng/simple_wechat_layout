@@ -11,12 +11,14 @@ let uploaded = []
 /** @type {string} */
 let lastHtml = ''
 
-/** 锁定的 Markdown：样式切换绝不改写、不重跑 AI */
 /** @type {string} */
 let lastMarkdown = ''
 
 /** @type {{ index: number, alt: string, url: string }[]} */
 let lastImages = []
+
+/** @type {object | null} */
+let me = null
 
 let options = {
   themes: [],
@@ -24,6 +26,7 @@ let options = {
   fonts: [],
   fontSizes: [],
   defaults: {},
+  limits: {},
 }
 
 let selectedTheme = 'grace'
@@ -32,12 +35,15 @@ let selectedFont = ''
 let selectedSize = '16px'
 let restyleTimer = 0
 let restyling = false
+/** @type {'login' | 'register'} */
+let authMode = 'login'
 
 const el = {
   text: document.getElementById('text'),
   textLabel: document.getElementById('textLabel'),
   modeHint: document.getElementById('modeHint'),
-  modeBtns: document.querySelectorAll('.mode-btn'),
+  quotaHint: document.getElementById('quotaHint'),
+  modeBtns: document.querySelectorAll('.mode-btn:not([data-auth])'),
   fileInput: document.getElementById('fileInput'),
   thumbList: document.getElementById('thumbList'),
   themeGroup: document.getElementById('themeGroup'),
@@ -56,6 +62,32 @@ const el = {
   insertGuide: document.getElementById('insertGuide'),
   insertList: document.getElementById('insertList'),
   markdownOut: document.getElementById('markdownOut'),
+  authSummary: document.getElementById('authSummary'),
+  accountLink: document.getElementById('accountLink'),
+  loginOpenBtn: document.getElementById('loginOpenBtn'),
+  logoutBtn: document.getElementById('logoutBtn'),
+  guestHint: document.getElementById('guestHint'),
+  guestLoginBtn: document.getElementById('guestLoginBtn'),
+  editorCard: document.getElementById('editorCard'),
+  authDialog: document.getElementById('authDialog'),
+  authForm: document.getElementById('authForm'),
+  authTitle: document.getElementById('authTitle'),
+  authUsername: document.getElementById('authUsername'),
+  authPassword: document.getElementById('authPassword'),
+  authInvite: document.getElementById('authInvite'),
+  inviteField: document.getElementById('inviteField'),
+  authError: document.getElementById('authError'),
+  authSubmit: document.getElementById('authSubmit'),
+  authCancel: document.getElementById('authCancel'),
+  authTabs: document.querySelectorAll('[data-auth]'),
+  confirmDialog: document.getElementById('confirmDialog'),
+  confirmText: document.getElementById('confirmText'),
+  confirmOk: document.getElementById('confirmOk'),
+  confirmCancel: document.getElementById('confirmCancel'),
+  supportContact: document.getElementById('supportContact'),
+  wechatId: document.getElementById('wechatId'),
+  copyWechatBtn: document.getElementById('copyWechatBtn'),
+  copyWechatStatus: document.getElementById('copyWechatStatus'),
 }
 
 function setStatus(msg, isError = false) {
@@ -95,7 +127,54 @@ function persistDraft() {
     }))
   }
   catch {
-    /* ignore quota */
+    /* ignore */
+  }
+}
+
+function quotaLabel(q) {
+  if (!q) return ''
+  if (!q.aiEnabled) return 'AI 未开通 · 可用「已有 Markdown」'
+  if (q.unlimited) return `今日 AI：不限 · 已用 ${q.usedToday} 次`
+  return `今日 AI：剩余 ${q.remainingToday} / ${q.dailyAiLimit} 次`
+}
+
+function applyMe(data) {
+  me = data
+  const loggedIn = Boolean(data?.user)
+  el.loginOpenBtn.hidden = loggedIn
+  el.logoutBtn.hidden = !loggedIn
+  el.accountLink.hidden = !loggedIn
+  el.guestHint.hidden = loggedIn
+  el.editorCard.hidden = !loggedIn
+  if (loggedIn) {
+    el.authSummary.textContent = `${data.user.username} · ${quotaLabel(data.quota)}`
+    el.quotaHint.hidden = false
+    el.quotaHint.textContent = quotaLabel(data.quota)
+  }
+  else {
+    el.authSummary.textContent = ''
+    el.quotaHint.hidden = true
+  }
+}
+
+async function refreshMe() {
+  try {
+    const res = await fetch('/api/me', { credentials: 'same-origin' })
+    if (res.status === 401) {
+      applyMe(null)
+      return null
+    }
+    if (!res.ok) {
+      applyMe(null)
+      return null
+    }
+    const data = await res.json()
+    applyMe(data)
+    return data
+  }
+  catch {
+    applyMe(null)
+    return null
   }
 }
 
@@ -111,13 +190,13 @@ function setInputMode(mode) {
     el.textLabel.textContent = '把 Markdown 贴在这里'
     el.text.placeholder = '# 标题\n\n段落文字……\n\n> 引用\n\n![配图说明](图片地址可选)'
     el.convertBtn.textContent = '直接预览'
-    el.modeHint.textContent = '不调用 AI。贴好后点「直接预览」，再换主题 / 字体。'
+    el.modeHint.textContent = '不调用 AI、不占今日次数。贴好后点「直接预览」，再换主题 / 字体。'
   }
   else {
     el.textLabel.textContent = '把文章写在这里'
     el.text.placeholder = '直接敲字就行，不用管格式。有标题、段落也可以一起贴进来。'
     el.convertBtn.textContent = '整理文字'
-    el.modeHint.textContent = '由 AI 整理一次（只改格式不改内容）。整理后可随意换样式，不会再调 AI。'
+    el.modeHint.textContent = 'AI 只整理格式（占 1 次今日额度）。整理后换样式不再调 AI。'
   }
   persistDraft()
 }
@@ -217,17 +296,23 @@ function applyResult(data, { fromAi = false, fromMarkdown = false } = {}) {
   el.resultSection.hidden = false
   renderAllChoices()
   persistDraft()
+
+  if (data.quota) {
+    if (me) me.quota = data.quota
+    applyMe(me)
+  }
 }
 
-/** 仅本地重渲染，绝不调用 /api/convert */
 async function restyleNow() {
   if (!lastMarkdown.trim()) return
   if (restyling) return
+  if (!me?.user) return
   restyling = true
   setStyleStatus('正在换样子…')
   try {
     const res = await fetch('/api/render', {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         markdown: lastMarkdown,
@@ -237,7 +322,7 @@ async function restyleNow() {
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || '换样子失败')
     applyResult(data, { fromAi: false })
-    setStyleStatus('样子已更新（文字未改动）')
+    setStyleStatus('样子已更新（文字未改动，未占用 AI）')
   }
   catch (e) {
     setStyleStatus(e.message || '换样子失败')
@@ -366,7 +451,52 @@ async function copyHtml(html) {
   if (!ok) throw new Error('复制失败，请长按预览区手动复制')
 }
 
+function openAuth(mode = 'login') {
+  authMode = mode === 'register' ? 'register' : 'login'
+  el.authTabs.forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.auth === authMode)
+  })
+  el.authTitle.textContent = authMode === 'register' ? '注册' : '登录'
+  el.authSubmit.textContent = authMode === 'register' ? '注册并登录' : '登录'
+  el.authError.hidden = true
+  const needInvite = Boolean(options.register?.inviteRequired)
+  el.inviteField.hidden = !(authMode === 'register' && needInvite)
+  if (el.authInvite) el.authInvite.required = authMode === 'register' && needInvite
+  el.authDialog.showModal()
+}
+
+function askConfirm(message) {
+  return new Promise((resolve) => {
+    el.confirmText.textContent = message
+    const onOk = () => {
+      cleanup()
+      resolve(true)
+    }
+    const onCancel = () => {
+      cleanup()
+      resolve(false)
+    }
+    const cleanup = () => {
+      el.confirmOk.removeEventListener('click', onOk)
+      el.confirmCancel.removeEventListener('click', onCancel)
+      el.confirmDialog.close()
+    }
+    el.confirmOk.addEventListener('click', onOk)
+    el.confirmCancel.addEventListener('click', onCancel)
+    el.confirmDialog.showModal()
+  })
+}
+
+function estimateChunkHint(textLen) {
+  const chunkChars = options.limits?.chunkChars || 5500
+  return Math.max(1, Math.ceil(textLen / chunkChars))
+}
+
 el.fileInput.addEventListener('change', async () => {
+  if (!me?.user) {
+    openAuth('login')
+    return
+  }
   const files = Array.from(el.fileInput.files || [])
   el.fileInput.value = ''
   if (!files.length) return
@@ -376,7 +506,7 @@ el.fileInput.addEventListener('change', async () => {
   try {
     const form = new FormData()
     files.forEach((f) => form.append('images', f))
-    const res = await fetch('/api/upload', { method: 'POST', body: form })
+    const res = await fetch('/api/upload', { method: 'POST', credentials: 'same-origin', body: form })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || '上传失败')
     uploaded = uploaded.concat(data.images || [])
@@ -392,20 +522,26 @@ el.fileInput.addEventListener('change', async () => {
 })
 
 el.convertBtn.addEventListener('click', async () => {
+  if (!me?.user) {
+    openAuth('login')
+    return
+  }
+
   const text = el.text.value
   if (!text.trim() && uploaded.length === 0) {
     setStatus(inputMode === 'markdown' ? '请先粘贴 Markdown，或上传图片' : '请先写一点文字，或上传图片', true)
     return
   }
 
-  el.convertBtn.disabled = true
   el.copyHint.hidden = true
 
   if (inputMode === 'markdown') {
+    el.convertBtn.disabled = true
     setStatus('正在排版预览（不调用 AI）…')
     try {
       const res = await fetch('/api/render', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           markdown: text,
@@ -428,12 +564,28 @@ el.convertBtn.addEventListener('click', async () => {
     return
   }
 
-  const charHint = text.length > 8000 ? `（较长，约 ${Math.min(180, 60 + Math.floor(text.length / 800))} 秒内）` : ''
+  const chunks = estimateChunkHint(text.length)
+  const q = me.quota
+  let confirmMsg = '将使用站点 AI 整理格式（只改结构不改内容），占用今日 1 次额度。'
+  if (chunks > 1) {
+    confirmMsg += `\n文章较长，约分 ${chunks} 段调用（仍只计 1 次日额度，但耗时与参考花费更高）。`
+  }
+  if (q && !q.unlimited) {
+    confirmMsg += `\n今日剩余 ${q.remainingToday} / ${q.dailyAiLimit} 次。`
+  }
+  const ok = await askConfirm(confirmMsg)
+  if (!ok) return
+
+  el.convertBtn.disabled = true
+  const charHint = text.length > 8000
+    ? `（较长，约 ${Math.min(180, 60 + Math.floor(text.length / 800))} 秒内）`
+    : ''
   setStatus(`正在整理文字（仅此一步会用 AI）${charHint}…`)
 
   try {
     const res = await fetch('/api/convert', {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         text,
@@ -445,11 +597,18 @@ el.convertBtn.addEventListener('click', async () => {
     if (!res.ok) throw new Error(data.error || '整理失败')
 
     applyResult(data, { fromAi: true })
-    setStatus('文字已整理并锁定。下面可随意换主题 / 字体，不会再调用 AI。')
+    const tokens = data.usage?.total_tokens
+      ?? ((data.usage?.prompt_tokens || 0) + (data.usage?.completion_tokens || 0))
+    const cost = data.estimatedCost || ''
+    const retryHint = data.retries ? `，含 ${data.retries} 次自动重试` : ''
+    setStatus(
+      `整理完成并锁定。本次约 ${tokens || '—'} tokens，参考 ${cost || '—'}（本站不扣费${retryHint}）。换主题不再调 AI。`,
+    )
     el.resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
   catch (e) {
     setStatus(e.message || '整理失败', true)
+    await refreshMe()
   }
   finally {
     el.convertBtn.disabled = false
@@ -486,14 +645,72 @@ el.copyBtn.addEventListener('click', async () => {
   }
 })
 
+el.loginOpenBtn.addEventListener('click', () => openAuth('login'))
+el.guestLoginBtn.addEventListener('click', () => openAuth('login'))
+el.authCancel.addEventListener('click', () => el.authDialog.close())
+
+el.authTabs.forEach((btn) => {
+  btn.addEventListener('click', () => openAuth(btn.dataset.auth))
+})
+
+el.authForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault()
+  el.authError.hidden = true
+  const path = authMode === 'register' ? '/api/auth/register' : '/api/auth/login'
+  try {
+    const res = await fetch(path, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: el.authUsername.value.trim(),
+        password: el.authPassword.value,
+        inviteCode: el.authInvite?.value?.trim() || undefined,
+      }),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || '失败')
+    applyMe(data)
+    el.authDialog.close()
+    el.authPassword.value = ''
+    setStatus(authMode === 'register' ? '注册成功，可以开始写文章了。' : '已登录。')
+  }
+  catch (e) {
+    el.authError.textContent = e.message || '失败'
+    el.authError.hidden = false
+  }
+})
+
+el.logoutBtn.addEventListener('click', async () => {
+  await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
+  applyMe(null)
+  setStatus('已退出登录。')
+})
+
 async function boot() {
   try {
     const res = await fetch('/api/options')
     if (res.ok) options = await res.json()
   }
   catch {
-    /* defaults below */
+    /* defaults */
   }
+
+  if (options.support?.wechat) {
+    el.wechatId.textContent = options.support.wechat
+  }
+
+  el.copyWechatBtn?.addEventListener('click', async () => {
+    const id = el.wechatId?.textContent?.trim() || ''
+    if (!id) return
+    try {
+      await navigator.clipboard.writeText(id)
+      el.copyWechatStatus.textContent = '已复制微信号'
+    }
+    catch {
+      el.copyWechatStatus.textContent = '复制失败，请长按微信号手动复制'
+    }
+  })
 
   if (!options.themes?.length) {
     options.themes = [
@@ -529,6 +746,8 @@ async function boot() {
   el.indentToggle.checked = d.indent !== undefined ? Boolean(d.indent) : true
   el.justifyToggle.checked = Boolean(d.justify)
 
+  await refreshMe()
+
   const draft = loadDraft()
   if (draft?.inputMode) setInputMode(draft.inputMode)
   else setInputMode('text')
@@ -546,11 +765,17 @@ async function boot() {
       el.justifyToggle.checked = Boolean(draft.style.justify)
     }
     renderAllChoices()
-    await restyleNow()
-    setStatus('已恢复上次整理的文字，可直接换样式。')
+    if (me?.user) {
+      await restyleNow()
+      setStatus('已恢复上次整理的文字，可直接换样式。')
+    }
   }
   else {
     renderAllChoices()
+  }
+
+  if (new URLSearchParams(location.search).get('login') === '1') {
+    openAuth('login')
   }
 }
 

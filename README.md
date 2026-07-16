@@ -4,47 +4,53 @@
 
 ## 做什么
 
-1. 任意文本（无格式或半 Markdown）**一律**经 DeepSeek 整理成干净 Markdown（锁定保存）  
-2. 本地渲染：主题 + 配色 + **字体 / 字号** + 缩进（借 doocs/md）  
-3. 换样式只走 `/api/render`，**不重新调用 AI**  
-4. 预览 + 一键复制到微信（外链图换成【图N】）  
+1. 注册登录后，任意文本经 DeepSeek 整理成干净 Markdown（默认每天 5 次，管理端可设不限）  
+2. 本地渲染：主题 + 配色 + **字体 / 字号** + 缩进  
+3. 换样式只走 `/api/render`，**不重新调用 AI、不占次数**  
+4. 预览 + 一键复制到微信；账户页可查看 token / 参考花费（本站不扣费）  
+5. 主页底部可放收款码（`public/pay-qr.png`）自愿支持  
 
 ## 本地运行
 
 ```bash
 cp .env.example .env
-# 编辑 .env，填入 DEEPSEEK_API_KEY
+# 编辑 .env：DEEPSEEK_API_KEY、ADMIN_TOKEN
 
 npm install
 npm start
 ```
 
-打开 http://127.0.0.1:3080
+打开 http://127.0.0.1:3080  
+管理后台：http://127.0.0.1:3080/admin.html（填写 `ADMIN_TOKEN`）
 
-开发热重载：`npm run dev`
+给妈妈「不限次数」：管理后台找到用户 → 勾选「不限」→ 保存。  
+防刷号：在 `.env` 设置 `REGISTER_INVITE_CODE`（注册必填）与 `REGISTER_PER_IP_PER_DAY`（同 IP 每日注册上限）。
 
 ## 环境变量
 
 | 变量 | 说明 |
 |------|------|
-| `DEEPSEEK_API_KEY` | 必填，服务端使用，网页不暴露配置 |
-| `DEEPSEEK_BASE_URL` | 默认 `https://api.deepseek.com` |
-| `DEEPSEEK_MODEL` | 默认 `deepseek-chat` |
-| `DEEPSEEK_CONNECT_TIMEOUT_MS` | TCP 建连超时，默认 `30000`（Node 默认仅 10s，慢网易误报） |
-| `DEEPSEEK_RETRY_TIMES` | 网络类错误自动重试次数，默认 `1`（共 2 次请求） |
-| `PORT` | 默认 `3080` |
-| `PUBLIC_BASE_URL` | 公网根地址，用于上传图片绝对 URL；本地可留空 |
+| `DEEPSEEK_API_KEY` | 必填，服务端使用 |
+| `ADMIN_TOKEN` | 管理后台令牌 |
+| `DEFAULT_DAILY_AI_LIMIT` | 新用户默认日次数，默认 `5`；`-1` 为不限 |
+| `DEEPSEEK_PRICE_INPUT` / `OUTPUT` | 参考单价（元/百万 tokens），仅展示 |
+| `SUPPORT_CONTACT` | 页脚联系方式 |
+| `PUBLIC_BASE_URL` | 公网根地址，上传图片绝对 URL |
 
 ## API
 
-- `GET /api/options` — 主题 / 配色默认项  
-- `POST /api/upload` — `multipart` 字段名 `images` → `{ images: [{ filename, url }] }`  
-- `POST /api/convert` — `{ text, imageUrls[], style }` → `{ markdown, html, images, style }`  
-- `POST /api/render` — `{ markdown, style }` → 换肤重渲染（不调 AI）  
-- `GET /uploads/:file` — 已上传图片  
+- `POST /api/auth/register|login|logout|password` — 账号  
+- `GET /api/me`、`GET /api/me/usage` — 当前用户与用量  
+- `GET /api/options` — 主题 / 配色 / 限额说明  
+- `POST /api/upload` — 需登录  
+- `POST /api/convert` — 需登录 + 日额度；返回 usage / 参考花费  
+- `POST /api/render` — 需登录；换肤不调 AI  
+- `GET|PATCH /api/admin/users` — 管理（`X-Admin-Token`）  
 - `GET /api/health` — 健康检查  
 
 `style` 字段：`{ theme, primaryColor, fontFamily, fontSize, indent, justify }`
+
+将「加我好友」二维码放到 `public/wechat-qr.png`，收款码放到 `public/pay-qr.png`（竖图会按原比例显示，勿强制正方形）。
 
 ## 部署（cylf.me / aeris）
 
@@ -78,6 +84,6 @@ wxlayout.cylf.me {
 - [DIRECTION.md](./DIRECTION.md) — 产品路线  
 - [QUESTIONS.md](./QUESTIONS.md) — 需求问答记录  
 
-## 明确不做（MVP）
+## 明确不做（当前）
 
-跳过 AI、微信草稿自动推送、登录、多主题、依赖 md2wechat 远程排版。
+余额充值扣费、收集用户 API Key、微信草稿自动推送。
