@@ -6,6 +6,7 @@ import {
 } from './db.js'
 import {
   countTodayOkConverts,
+  effectiveTodayOkConverts,
   formatYuanFromLi,
   listUsageForUser,
   getTokenPrices,
@@ -108,13 +109,15 @@ export function getAdminOverview() {
 export function listUsersAdmin() {
   const dayKey = shanghaiDayKey()
   const rows = getDb().prepare(`
-    SELECT id, username, ai_enabled, daily_ai_limit, status, register_ip, created_at
+    SELECT id, username, ai_enabled, daily_ai_limit, status, register_ip,
+           quota_reset_day, quota_reset_used, created_at
     FROM users
     ORDER BY id ASC
   `).all()
 
   return rows.map((u) => {
-    const usedToday = countTodayOkConverts(u.id, dayKey)
+    const rawUsedToday = countTodayOkConverts(u.id, dayKey)
+    const usedToday = effectiveTodayOkConverts(u, dayKey)
     const sum = getDb().prepare(`
       SELECT
         COALESCE(SUM(CASE WHEN status = 'ok' THEN total_tokens ELSE 0 END), 0) AS tokens,
@@ -134,6 +137,8 @@ export function listUsersAdmin() {
       registerIp: u.register_ip || '',
       createdAt: u.created_at,
       usedToday,
+      rawUsedToday,
+      quotaResetToday: String(u.quota_reset_day || '') === dayKey,
       totalTokens: Number(sum?.tokens) || 0,
       totalEstimatedCost: formatYuanFromLi(sum?.cost_micro),
       okCount: Number(sum?.ok_count) || 0,
@@ -232,13 +237,13 @@ export function listIpsAdmin() {
       ip: r.ip,
       count: Number(r.count) || 0,
       capped: perIp > 0 && Number(r.count) >= perIp,
-      banned: banMap.has(r.ip),
+      banned: banMap.has(r.ip) || banMap.has(normalizeIp(r.ip)),
     })),
     recent: recent.map((r) => ({
       ip: r.ip,
       dayKey: r.day_key,
       count: Number(r.count) || 0,
-      banned: banMap.has(r.ip),
+      banned: banMap.has(r.ip) || banMap.has(normalizeIp(r.ip)),
     })),
     bans: bans.map((b) => ({
       ip: b.ip,
@@ -278,4 +283,56 @@ export function unbanIp(ip) {
     throw err
   }
   return { ok: true, ip: key }
+}
+
+/** @param {string} ip */
+function ipKeyVariants(ip) {
+  const key = normalizeIp(ip)
+  const raw = String(ip || '').trim()
+  const set = new Set([key, raw].filter(Boolean))
+  if (key && key !== 'unknown' && !key.includes(':')) {
+    set.add(`::ffff:${key}`)
+  }
+  return [...set]
+}
+
+/**
+ * 清空该 IP 今日注册计数，解除「已触顶」
+ * @param {string} ip
+ */
+export function resetIpRegisterToday(ip) {
+  const variants = ipKeyVariants(ip)
+  if (!variants.length || variants.every((v) => v === 'unknown')) {
+    const err = new Error('无效 IP')
+    err.code = 'BAD_IP'
+    throw err
+  }
+  const dayKey = shanghaiDayKey()
+  const db = getDb()
+  const stmt = db.prepare('DELETE FROM register_ips WHERE ip = ? AND day_key = ?')
+  let changes = 0
+  for (const v of variants) {
+    changes += stmt.run(v, dayKey).changes || 0
+  }
+  return { ok: true, ip: normalizeIp(ip), dayKey, cleared: changes }
+}
+
+/**
+ * 重置用户今日 AI 已用次数（用量记录保留，仅放行额度）
+ * @param {number} userId
+ */
+export function resetUserAiToday(userId) {
+  const db = getDb()
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId)
+  if (!user) {
+    const err = new Error('用户不存在')
+    err.code = 'NOT_FOUND'
+    throw err
+  }
+  const dayKey = shanghaiDayKey()
+  const used = countTodayOkConverts(userId, dayKey)
+  db.prepare(`
+    UPDATE users SET quota_reset_day = ?, quota_reset_used = ? WHERE id = ?
+  `).run(dayKey, used, userId)
+  return listUsersAdmin().find((u) => u.id === userId)
 }

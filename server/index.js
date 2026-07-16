@@ -56,6 +56,8 @@ import {
   banIp,
   unbanIp,
   listUserUsageAdmin,
+  resetIpRegisterToday,
+  resetUserAiToday,
 } from './admin.js'
 import {
   saveArticleHistory,
@@ -527,8 +529,34 @@ app.delete('/api/admin/ips/ban', requireAdmin, (req, res) => {
   }
 })
 
+app.post('/api/admin/ips/reset-today', requireAdmin, (req, res) => {
+  try {
+    resetIpRegisterToday(req.body?.ip)
+    res.json({ ok: true, ips: listIpsAdmin() })
+  }
+  catch (e) {
+    res.status(400).json({ error: e.message || '重置失败', code: e.code || 'UNKNOWN' })
+  }
+})
+
 app.get('/api/admin/users', requireAdmin, (_req, res) => {
   res.json({ users: listUsersAdmin() })
+})
+
+app.post('/api/admin/users/:id/reset-today', requireAdmin, (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    if (!Number.isInteger(id) || id < 1) {
+      res.status(400).json({ error: '无效用户 id' })
+      return
+    }
+    const user = resetUserAiToday(id)
+    res.json({ user })
+  }
+  catch (e) {
+    const status = e.code === 'NOT_FOUND' ? 404 : 400
+    res.status(status).json({ error: e.message || '重置失败', code: e.code || 'UNKNOWN' })
+  }
 })
 
 app.get('/api/admin/users/:id/usage', requireAdmin, (req, res) => {

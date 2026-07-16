@@ -114,7 +114,7 @@ function renderUsers(users) {
         <label class="check tiny"><input type="checkbox" data-unlimited ${u.unlimited ? 'checked' : ''} /> 不限</label>
         <input type="number" class="text-input tiny-input" data-limit min="0" max="10000" value="${escapeAttr(limitVal)}" ${u.unlimited ? 'disabled' : ''} />
       </td>
-      <td>${u.usedToday}</td>
+      <td>${u.usedToday}${u.quotaResetToday && u.rawUsedToday !== u.usedToday ? `<br><span class="tiny">实记 ${u.rawUsedToday}</span>` : ''}</td>
       <td>${escapeHtml(u.totalEstimatedCost)}<br><span class="tiny">${u.totalTokens} tok · 成${u.okCount}/败${u.failCount}</span></td>
       <td class="tiny">${escapeHtml(fmtTime(u.lastAiAt))}</td>
       <td>${u.status === 'active' ? '正常' : '禁用'}</td>
@@ -123,6 +123,7 @@ function renderUsers(users) {
         <button type="button" class="btn btn-secondary btn-sm" data-toggle-status>
           ${u.status === 'active' ? '禁用' : '启用'}
         </button>
+        <button type="button" class="btn btn-secondary btn-sm" data-reset-today title="清空今日已用次数，用量记录保留">重置今日</button>
         <button type="button" class="btn btn-secondary btn-sm" data-usage>明细</button>
       </td>
     `
@@ -169,6 +170,19 @@ function renderUsers(users) {
         el.adminStatus.classList.add('error')
       }
     })
+    tr.querySelector('[data-reset-today]').addEventListener('click', async () => {
+      if (!confirm(`重置「${u.username}」今日 AI 已用次数？用量记录会保留，仅重新放行额度。`)) return
+      el.adminStatus.classList.remove('error')
+      try {
+        await api(`/api/admin/users/${u.id}/reset-today`, { method: 'POST', body: '{}' })
+        el.adminStatus.textContent = `已重置 ${u.username} 今日额度`
+        await loadAll()
+      }
+      catch (e) {
+        el.adminStatus.textContent = e.message || '重置失败'
+        el.adminStatus.classList.add('error')
+      }
+    })
     tr.querySelector('[data-usage]').addEventListener('click', () => {
       loadUserUsage(u.id, u.username)
     })
@@ -210,7 +224,7 @@ async function loadUserUsage(userId, username) {
 
 function renderIps(data) {
   const per = data.registerPerIpPerDay
-  el.ipsHint.textContent = `今日 ${data.dayKey} · 同 IP 日注册上限 ${per === 0 ? '不限' : per} · 封禁后禁止注册 / 登录 / AI 整理`
+  el.ipsHint.textContent = `今日 ${data.dayKey} · 同 IP 日注册上限 ${per === 0 ? '不限' : per} · 封禁后禁止注册 / 登录 / AI 整理 · 「重置今日」可清空该 IP 今日注册计数`
 
   const todayBody = el.todayIpsTable.querySelector('tbody')
   todayBody.innerHTML = ''
@@ -227,6 +241,14 @@ function renderIps(data) {
       <td class="ops"></td>
     `
     const ops = tr.querySelector('.ops')
+    const resetBtn = document.createElement('button')
+    resetBtn.type = 'button'
+    resetBtn.className = 'btn btn-secondary btn-sm'
+    resetBtn.textContent = '重置今日'
+    resetBtn.title = '清空该 IP 今日注册计数'
+    resetBtn.addEventListener('click', () => doResetIpToday(row.ip))
+    ops.append(resetBtn)
+
     if (row.banned) {
       const btn = document.createElement('button')
       btn.type = 'button'
@@ -301,6 +323,23 @@ async function doUnban(ip) {
   }
   catch (e) {
     el.adminStatus.textContent = e.message || '解封失败'
+    el.adminStatus.classList.add('error')
+  }
+}
+
+async function doResetIpToday(ip) {
+  if (!confirm(`清空 IP ${ip} 的今日注册计数？清空后可再次注册。`)) return
+  el.adminStatus.classList.remove('error')
+  try {
+    const data = await api('/api/admin/ips/reset-today', {
+      method: 'POST',
+      body: JSON.stringify({ ip }),
+    })
+    renderIps(data.ips)
+    el.adminStatus.textContent = `已重置 ${ip} 今日注册计数`
+  }
+  catch (e) {
+    el.adminStatus.textContent = e.message || '重置失败'
     el.adminStatus.classList.add('error')
   }
 }

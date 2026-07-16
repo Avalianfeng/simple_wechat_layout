@@ -189,6 +189,17 @@ export function migrateUsageCostPrecision() {
       );
     `)
     database.exec('PRAGMA user_version = 3')
+    ver = 3
+  }
+
+  if (ver < 4) {
+    if (!tableHasColumn('users', 'quota_reset_day')) {
+      database.exec(`ALTER TABLE users ADD COLUMN quota_reset_day TEXT NOT NULL DEFAULT '';`)
+    }
+    if (!tableHasColumn('users', 'quota_reset_used')) {
+      database.exec(`ALTER TABLE users ADD COLUMN quota_reset_used INTEGER NOT NULL DEFAULT 0;`)
+    }
+    database.exec('PRAGMA user_version = 4')
   }
 }
 
@@ -225,11 +236,24 @@ export function countTodayOkConverts(userId, dayKey = shanghaiDayKey()) {
 }
 
 /**
+ * 计入额度的今日次数（支持管理员「重置今日已用」）
+ * @param {{ id: number, quota_reset_day?: string, quota_reset_used?: number }} user
+ * @param {string} [dayKey]
+ */
+export function effectiveTodayOkConverts(user, dayKey = shanghaiDayKey()) {
+  const used = countTodayOkConverts(user.id, dayKey)
+  if (String(user.quota_reset_day || '') === dayKey) {
+    return Math.max(0, used - (Number(user.quota_reset_used) || 0))
+  }
+  return used
+}
+
+/**
  * @param {object} user
  */
 export function getQuotaState(user) {
   const limit = Number(user.daily_ai_limit)
-  const used = countTodayOkConverts(user.id)
+  const used = effectiveTodayOkConverts(user)
   const unlimited = limit === -1
   const aiEnabled = Boolean(user.ai_enabled)
   let remaining = 0
@@ -268,7 +292,7 @@ export function assertCanConvert(user) {
     throw err
   }
   if (limit !== -1) {
-    const used = countTodayOkConverts(user.id)
+    const used = effectiveTodayOkConverts(user)
     if (used >= limit) {
       const err = new Error(`今日 AI 整理已用完（${limit} 次）。明天再试，或改用「已有 Markdown」模式。`)
       err.code = 'QUOTA_EXCEEDED'

@@ -20,7 +20,9 @@ export function normalizeIp(ip) {
 export function assertIpNotBanned(ip) {
   const key = normalizeIp(ip)
   if (!key || key === 'unknown') return
-  const row = getDb().prepare('SELECT ip, reason FROM ip_bans WHERE ip = ?').get(key)
+  const db = getDb()
+  const row = db.prepare('SELECT ip, reason FROM ip_bans WHERE ip = ?').get(key)
+    || (key.includes(':') ? null : db.prepare('SELECT ip, reason FROM ip_bans WHERE ip = ?').get(`::ffff:${key}`))
   if (row) {
     const err = new Error(row.reason ? `当前网络已被限制：${row.reason}` : '当前网络已被限制，请联系管理员')
     err.code = 'IP_BANNED'
