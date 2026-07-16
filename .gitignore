@@ -27,3 +27,10 @@ node_modules/
 # editor / local
 .cursor/
 .mcp.json
+
+# uploads
+data/uploads/*
+!data/uploads/.gitkeep
+
+# node_modules
+node_modules/
