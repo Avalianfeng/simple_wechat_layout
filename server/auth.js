@@ -3,7 +3,8 @@ import { getDb, defaultDailyAiLimit, getRegisterInviteCode, registerPerIpPerDay 
 
 const SESSION_DAYS = 30
 const COOKIE_NAME = 'swl_session'
-const USERNAME_RE = /^[a-zA-Z0-9_]{3,32}$/
+/** 3～32 字：汉字、字母、数字、下划线 */
+const USERNAME_RE = /^[\u4e00-\u9fff\u3400-\u4dbfa-zA-Z0-9_]{3,32}$/u
 
 export { COOKIE_NAME }
 
@@ -69,7 +70,7 @@ export function verifyPassword(password, stored) {
 export function registerUser(username, password, opts = {}) {
   const name = String(username || '').trim()
   if (!USERNAME_RE.test(name)) {
-    const err = new Error('用户名需为 3～32 位字母、数字或下划线')
+    const err = new Error('用户名需为 3～32 个汉字、字母、数字或下划线')
     err.code = 'BAD_USERNAME'
     throw err
   }
