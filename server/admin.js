@@ -38,7 +38,7 @@ export function listUsersAdmin() {
     const sum = getDb().prepare(`
       SELECT
         COALESCE(SUM(CASE WHEN status = 'ok' THEN total_tokens ELSE 0 END), 0) AS tokens,
-        COALESCE(SUM(CASE WHEN status = 'ok' THEN est_cost_cents ELSE 0 END), 0) AS cost_li
+        COALESCE(SUM(CASE WHEN status = 'ok' THEN est_cost_cents ELSE 0 END), 0) AS cost_micro
       FROM usage_logs WHERE user_id = ?
     `).get(u.id)
     return {
@@ -51,7 +51,7 @@ export function listUsersAdmin() {
       createdAt: u.created_at,
       usedToday,
       totalTokens: Number(sum?.tokens) || 0,
-      totalEstimatedCost: formatYuanFromLi(sum?.cost_li),
+      totalEstimatedCost: formatYuanFromLi(sum?.cost_micro),
     }
   })
 }

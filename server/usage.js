@@ -1,34 +1,180 @@
 import { getDb } from './db.js'
 import { shanghaiDayKey } from './auth.js'
 
-/** DeepSeek 公开价参考（元 / 百万 tokens），仅展示用 */
-export function getTokenPrices() {
+/** 库内整数单位：微元（1 元 = 1_000_000）；表字段仍名 est_cost_cents */
+const COST_SCALE = 1_000_000
+
+/** DeepSeek V4 公开价（元 / 百万 tokens），仅展示用 */
+const MODEL_PRICES = {
+  'deepseek-v4-flash': {
+    inputCacheHitPerMillion: 0.02,
+    inputCacheMissPerMillion: 1,
+    outputPerMillion: 2,
+  },
+  'deepseek-v4-pro': {
+    inputCacheHitPerMillion: 0.025,
+    inputCacheMissPerMillion: 3,
+    outputPerMillion: 6,
+  },
+}
+
+/** 即将废弃的别名 → flash（官方兼容说明） */
+const MODEL_ALIASES = {
+  'deepseek-chat': 'deepseek-v4-flash',
+  'deepseek-reasoner': 'deepseek-v4-flash',
+}
+
+export function resolvePriceModel(model) {
+  const raw = (model || process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash').trim()
+  return MODEL_ALIASES[raw] || raw
+}
+
+/**
+ * @param {string} [model]
+ */
+export function getTokenPrices(model) {
+  const resolved = resolvePriceModel(model)
+  const base = MODEL_PRICES[resolved] || MODEL_PRICES['deepseek-v4-flash']
+
+  const inputCacheHitPerMillion = Number(process.env.DEEPSEEK_PRICE_INPUT_CACHE_HIT)
+  const inputCacheMissPerMillion = Number(process.env.DEEPSEEK_PRICE_INPUT)
+  const outputPerMillion = Number(process.env.DEEPSEEK_PRICE_OUTPUT)
+
+  const prices = {
+    model: resolved,
+    inputCacheHitPerMillion: Number.isFinite(inputCacheHitPerMillion)
+      ? inputCacheHitPerMillion
+      : base.inputCacheHitPerMillion,
+    inputCacheMissPerMillion: Number.isFinite(inputCacheMissPerMillion)
+      ? inputCacheMissPerMillion
+      : base.inputCacheMissPerMillion,
+    outputPerMillion: Number.isFinite(outputPerMillion)
+      ? outputPerMillion
+      : base.outputPerMillion,
+  }
+
+  // 兼容旧字段：inputPerMillion = 未命中价
   return {
-    inputPerMillion: Number(process.env.DEEPSEEK_PRICE_INPUT) || 0.14,
-    outputPerMillion: Number(process.env.DEEPSEEK_PRICE_OUTPUT) || 0.28,
+    ...prices,
+    inputPerMillion: prices.inputCacheMissPerMillion,
   }
 }
 
 /**
- * @param {{ prompt_tokens?: number, completion_tokens?: number }} usage
- * @returns {number} 厘（0.001 元）
+ * @param {{
+ *   prompt_tokens?: number,
+ *   completion_tokens?: number,
+ *   prompt_cache_hit_tokens?: number,
+ *   prompt_cache_miss_tokens?: number,
+ * }} usage
+ * @returns {number} 微元（1e-6 元）
  */
 export function estimateCostLi(usage) {
-  const { inputPerMillion, outputPerMillion } = getTokenPrices()
-  const prompt = Number(usage?.prompt_tokens) || 0
+  const {
+    inputCacheHitPerMillion,
+    inputCacheMissPerMillion,
+    outputPerMillion,
+  } = getTokenPrices()
+
   const completion = Number(usage?.completion_tokens) || 0
-  const yuan = (prompt * inputPerMillion + completion * outputPerMillion) / 1_000_000
-  return Math.round(yuan * 1000)
+  const hasCache =
+    usage?.prompt_cache_hit_tokens != null
+    || usage?.prompt_cache_miss_tokens != null
+
+  let hit = 0
+  let miss = 0
+  if (hasCache) {
+    hit = Number(usage?.prompt_cache_hit_tokens) || 0
+    miss = Number(usage?.prompt_cache_miss_tokens) || 0
+  }
+  else {
+    // 无 cache 字段：整段 prompt 按未命中计
+    miss = Number(usage?.prompt_tokens) || 0
+  }
+
+  const yuan = (
+    hit * inputCacheHitPerMillion
+    + miss * inputCacheMissPerMillion
+    + completion * outputPerMillion
+  ) / 1_000_000
+  return Math.round(yuan * COST_SCALE)
 }
 
 /**
- * @param {number} li
+ * @param {number} microYuan 微元
  */
-export function formatYuanFromLi(li) {
-  const n = (Number(li) || 0) / 1000
-  if (n < 0.001) return `¥${n.toFixed(4)}`
-  if (n < 0.01) return `¥${n.toFixed(3)}`
+export function formatYuanFromLi(microYuan) {
+  const n = (Number(microYuan) || 0) / COST_SCALE
+  if (n < 0.01) return `¥${n.toFixed(4)}`
+  if (n < 1) return `¥${n.toFixed(3)}`
   return `¥${n.toFixed(2)}`
+}
+
+function tableHasColumn(table, column) {
+  const cols = getDb().prepare(`PRAGMA table_info(${table})`).all()
+  return cols.some((c) => c.name === column)
+}
+
+/** 迁移：厘→微元（v1），再补 cache 列并按 V4 价重算（v2） */
+export function migrateUsageCostPrecision() {
+  const database = getDb()
+  let ver = Number(database.prepare('PRAGMA user_version').get()?.user_version) || 0
+
+  if (ver < 1) {
+    const rows = database.prepare(`
+      SELECT id, prompt_tokens, completion_tokens FROM usage_logs
+    `).all()
+    const upd = database.prepare('UPDATE usage_logs SET est_cost_cents = ? WHERE id = ?')
+    for (const r of rows) {
+      upd.run(
+        estimateCostLi({
+          prompt_tokens: r.prompt_tokens,
+          completion_tokens: r.completion_tokens,
+        }),
+        r.id,
+      )
+    }
+    database.exec('PRAGMA user_version = 1')
+    ver = 1
+  }
+
+  if (ver < 2) {
+    if (!tableHasColumn('usage_logs', 'prompt_cache_hit_tokens')) {
+      database.exec(`
+        ALTER TABLE usage_logs ADD COLUMN prompt_cache_hit_tokens INTEGER NOT NULL DEFAULT 0;
+      `)
+    }
+    if (!tableHasColumn('usage_logs', 'prompt_cache_miss_tokens')) {
+      database.exec(`
+        ALTER TABLE usage_logs ADD COLUMN prompt_cache_miss_tokens INTEGER NOT NULL DEFAULT 0;
+      `)
+    }
+
+    const rows = database.prepare(`
+      SELECT id, prompt_tokens, completion_tokens,
+             prompt_cache_hit_tokens, prompt_cache_miss_tokens
+      FROM usage_logs
+    `).all()
+    const upd = database.prepare('UPDATE usage_logs SET est_cost_cents = ? WHERE id = ?')
+    for (const r of rows) {
+      const hit = Number(r.prompt_cache_hit_tokens) || 0
+      const miss = Number(r.prompt_cache_miss_tokens) || 0
+      upd.run(
+        estimateCostLi({
+          prompt_tokens: r.prompt_tokens,
+          completion_tokens: r.completion_tokens,
+          ...(hit || miss
+            ? {
+                prompt_cache_hit_tokens: hit,
+                prompt_cache_miss_tokens: miss,
+              }
+            : {}),
+        }),
+        r.id,
+      )
+    }
+    database.exec('PRAGMA user_version = 2')
+  }
 }
 
 /**
@@ -101,6 +247,8 @@ export function assertCanConvert(user) {
  *   userId: number,
  *   promptTokens?: number,
  *   completionTokens?: number,
+ *   promptCacheHitTokens?: number,
+ *   promptCacheMissTokens?: number,
  *   textChars?: number,
  *   chunks?: number,
  *   retries?: number,
@@ -111,28 +259,43 @@ export function assertCanConvert(user) {
 export function insertUsageLog(row) {
   const prompt = Number(row.promptTokens) || 0
   const completion = Number(row.completionTokens) || 0
+  const hit = Number(row.promptCacheHitTokens) || 0
+  const miss = Number(row.promptCacheMissTokens) || 0
   const total = prompt + completion
-  const estLi = estimateCostLi({ prompt_tokens: prompt, completion_tokens: completion })
-  // 表字段 est_cost_cents 存「厘」，命名历史兼容；前端用 formatYuanFromLi
+  const hasCache = row.promptCacheHitTokens != null || row.promptCacheMissTokens != null
+  const estMicro = estimateCostLi({
+    prompt_tokens: prompt,
+    completion_tokens: completion,
+    ...(hasCache
+      ? {
+          prompt_cache_hit_tokens: hit,
+          prompt_cache_miss_tokens: miss,
+        }
+      : {}),
+  })
+  // 表字段 est_cost_cents 存「微元」，命名历史兼容；前端用 formatYuanFromLi
   getDb().prepare(`
     INSERT INTO usage_logs (
       user_id, day_key, prompt_tokens, completion_tokens, total_tokens,
+      prompt_cache_hit_tokens, prompt_cache_miss_tokens,
       est_cost_cents, text_chars, chunks, retries, status, error_code
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     row.userId,
     shanghaiDayKey(),
     prompt,
     completion,
     total,
-    estLi,
+    hit,
+    miss,
+    estMicro,
     Number(row.textChars) || 0,
     Number(row.chunks) || 1,
     Number(row.retries) || 0,
     row.status,
     row.errorCode || null,
   )
-  return { totalTokens: total, estCostLi: estLi, estimatedCost: formatYuanFromLi(estLi) }
+  return { totalTokens: total, estCostLi: estMicro, estimatedCost: formatYuanFromLi(estMicro) }
 }
 
 /**
@@ -144,6 +307,7 @@ export function listUsageForUser(userId, opts = {}) {
   const offset = Math.max(0, Number(opts.offset) || 0)
   const rows = getDb().prepare(`
     SELECT id, day_key, prompt_tokens, completion_tokens, total_tokens,
+           prompt_cache_hit_tokens, prompt_cache_miss_tokens,
            est_cost_cents, text_chars, chunks, retries, status, error_code, created_at
     FROM usage_logs
     WHERE user_id = ?
@@ -157,6 +321,8 @@ export function listUsageForUser(userId, opts = {}) {
     promptTokens: r.prompt_tokens,
     completionTokens: r.completion_tokens,
     totalTokens: r.total_tokens,
+    promptCacheHitTokens: r.prompt_cache_hit_tokens,
+    promptCacheMissTokens: r.prompt_cache_miss_tokens,
     estimatedCost: formatYuanFromLi(r.est_cost_cents),
     textChars: r.text_chars,
     chunks: r.chunks,
@@ -168,14 +334,30 @@ export function listUsageForUser(userId, opts = {}) {
 }
 
 /**
- * @param {{ prompt_tokens?: number, completion_tokens?: number, total_tokens?: number } | null} a
- * @param {{ prompt_tokens?: number, completion_tokens?: number, total_tokens?: number } | null} b
+ * @param {{
+ *   prompt_tokens?: number,
+ *   completion_tokens?: number,
+ *   total_tokens?: number,
+ *   prompt_cache_hit_tokens?: number,
+ *   prompt_cache_miss_tokens?: number,
+ * } | null} a
+ * @param {{
+ *   prompt_tokens?: number,
+ *   completion_tokens?: number,
+ *   total_tokens?: number,
+ *   prompt_cache_hit_tokens?: number,
+ *   prompt_cache_miss_tokens?: number,
+ * } | null} b
  */
 export function mergeUsage(a, b) {
   return {
     prompt_tokens: (Number(a?.prompt_tokens) || 0) + (Number(b?.prompt_tokens) || 0),
     completion_tokens: (Number(a?.completion_tokens) || 0) + (Number(b?.completion_tokens) || 0),
     total_tokens: (Number(a?.total_tokens) || 0) + (Number(b?.total_tokens) || 0),
+    prompt_cache_hit_tokens:
+      (Number(a?.prompt_cache_hit_tokens) || 0) + (Number(b?.prompt_cache_hit_tokens) || 0),
+    prompt_cache_miss_tokens:
+      (Number(a?.prompt_cache_miss_tokens) || 0) + (Number(b?.prompt_cache_miss_tokens) || 0),
   }
 }
 

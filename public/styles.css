@@ -620,6 +620,17 @@ textarea:focus {
   border-bottom: 1px solid var(--border);
   font-size: 0.88rem;
   color: var(--ink);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.history-actions {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .usage-list li.fail {

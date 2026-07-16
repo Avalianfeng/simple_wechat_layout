@@ -46,7 +46,9 @@ export function initDb() {
       prompt_tokens INTEGER NOT NULL DEFAULT 0,
       completion_tokens INTEGER NOT NULL DEFAULT 0,
       total_tokens INTEGER NOT NULL DEFAULT 0,
-      est_cost_cents INTEGER NOT NULL DEFAULT 0,
+      prompt_cache_hit_tokens INTEGER NOT NULL DEFAULT 0,
+      prompt_cache_miss_tokens INTEGER NOT NULL DEFAULT 0,
+      est_cost_cents INTEGER NOT NULL DEFAULT 0, -- 微元（1e-6 元），字段名历史兼容
       text_chars INTEGER NOT NULL DEFAULT 0,
       chunks INTEGER NOT NULL DEFAULT 1,
       retries INTEGER NOT NULL DEFAULT 0,
@@ -66,6 +68,28 @@ export function initDb() {
       count INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (ip, day_key)
     );
+
+    CREATE TABLE IF NOT EXISTS articles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      markdown TEXT NOT NULL,
+      style_json TEXT NOT NULL DEFAULT '{}',
+      images_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_articles_user
+      ON articles(user_id, id DESC);
+
+    CREATE TABLE IF NOT EXISTS uploads (
+      filename TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_uploads_user
+      ON uploads(user_id);
   `)
   return db
 }

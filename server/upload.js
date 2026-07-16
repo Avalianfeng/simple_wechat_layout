@@ -3,9 +3,25 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import multer from 'multer'
 import { v4 as uuidv4 } from 'uuid'
+import { getDb } from './db.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const uploadsDir = path.join(__dirname, '..', 'data', 'uploads')
+
+/**
+ * @param {number} userId
+ * @param {string[]} filenames
+ */
+export function recordUploads(userId, filenames) {
+  const db = getDb()
+  const stmt = db.prepare(
+    'INSERT OR IGNORE INTO uploads (filename, user_id) VALUES (?, ?)',
+  )
+  for (const name of filenames) {
+    if (!name || name.includes('..') || name.includes('/') || name.includes('\\')) continue
+    stmt.run(name, userId)
+  }
+}
 
 const ALLOWED = new Set([
   'image/jpeg',

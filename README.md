@@ -33,7 +33,7 @@ npm start
 | `DEEPSEEK_API_KEY` | 必填，服务端使用 |
 | `ADMIN_TOKEN` | 管理后台令牌 |
 | `DEFAULT_DAILY_AI_LIMIT` | 新用户默认日次数，默认 `5`；`-1` 为不限 |
-| `DEEPSEEK_PRICE_INPUT` / `OUTPUT` | 参考单价（元/百万 tokens），仅展示 |
+| `DEEPSEEK_PRICE_INPUT_CACHE_HIT` / `INPUT` / `OUTPUT` | 参考单价（元/百万 tokens）；默认按模型用 V4 公开价（含缓存命中） |
 | `SUPPORT_CONTACT` | 页脚联系方式 |
 | `PUBLIC_BASE_URL` | 公网根地址，上传图片绝对 URL |
 

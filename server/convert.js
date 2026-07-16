@@ -11,7 +11,7 @@ import {
 } from './text-limits.js'
 
 const DEFAULT_BASE = 'https://api.deepseek.com'
-const DEFAULT_MODEL = 'deepseek-chat'
+const DEFAULT_MODEL = 'deepseek-v4-flash'
 const DEFAULT_CONNECT_TIMEOUT_MS = 30_000
 const DEFAULT_RETRY_TIMES = 1
 
@@ -190,14 +190,30 @@ async function convertChunk(input) {
 }
 
 /**
- * @param {{ prompt_tokens?: number, completion_tokens?: number, total_tokens?: number } | null} a
- * @param {{ prompt_tokens?: number, completion_tokens?: number, total_tokens?: number } | null} b
+ * @param {{
+ *   prompt_tokens?: number,
+ *   completion_tokens?: number,
+ *   total_tokens?: number,
+ *   prompt_cache_hit_tokens?: number,
+ *   prompt_cache_miss_tokens?: number,
+ * } | null} a
+ * @param {{
+ *   prompt_tokens?: number,
+ *   completion_tokens?: number,
+ *   total_tokens?: number,
+ *   prompt_cache_hit_tokens?: number,
+ *   prompt_cache_miss_tokens?: number,
+ * } | null} b
  */
 function addUsage(a, b) {
   return {
     prompt_tokens: (Number(a?.prompt_tokens) || 0) + (Number(b?.prompt_tokens) || 0),
     completion_tokens: (Number(a?.completion_tokens) || 0) + (Number(b?.completion_tokens) || 0),
     total_tokens: (Number(a?.total_tokens) || 0) + (Number(b?.total_tokens) || 0),
+    prompt_cache_hit_tokens:
+      (Number(a?.prompt_cache_hit_tokens) || 0) + (Number(b?.prompt_cache_hit_tokens) || 0),
+    prompt_cache_miss_tokens:
+      (Number(a?.prompt_cache_miss_tokens) || 0) + (Number(b?.prompt_cache_miss_tokens) || 0),
   }
 }
 
@@ -232,8 +248,20 @@ export async function convertToMarkdown({ text, imageUrls = [], theme } = {}) {
     chunks: chunks.length,
   })
 
-  /** @type {{ prompt_tokens: number, completion_tokens: number, total_tokens: number }} */
-  let usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+  /** @type {{
+   *   prompt_tokens: number,
+   *   completion_tokens: number,
+   *   total_tokens: number,
+   *   prompt_cache_hit_tokens: number,
+   *   prompt_cache_miss_tokens: number,
+   * }} */
+  let usage = {
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+    prompt_cache_hit_tokens: 0,
+    prompt_cache_miss_tokens: 0,
+  }
   let retries = 0
 
   try {

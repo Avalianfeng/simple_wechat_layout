@@ -3,6 +3,9 @@ const el = {
   quotaText: document.getElementById('quotaText'),
   usageList: document.getElementById('usageList'),
   usageEmpty: document.getElementById('usageEmpty'),
+  historyList: document.getElementById('historyList'),
+  historyEmpty: document.getElementById('historyEmpty'),
+  historyLimit: document.getElementById('historyLimit'),
   oldPassword: document.getElementById('oldPassword'),
   newPassword: document.getElementById('newPassword'),
   pwdBtn: document.getElementById('pwdBtn'),
@@ -16,6 +19,56 @@ function quotaLabel(q) {
   return `今日已用 ${q.usedToday} / ${q.dailyAiLimit} 次 · 剩余 ${q.remainingToday} 次`
 }
 
+async function loadHistory() {
+  const res = await fetch('/api/history', { credentials: 'same-origin' })
+  if (!res.ok) return
+  const data = await res.json()
+  if (el.historyLimit) el.historyLimit.textContent = String(data.limit || 10)
+  const items = data.items || []
+  el.historyList.innerHTML = ''
+  if (!items.length) {
+    el.historyEmpty.hidden = false
+    return
+  }
+  el.historyEmpty.hidden = true
+  for (const it of items) {
+    const li = document.createElement('li')
+    const meta = document.createElement('div')
+    meta.textContent = [
+      it.createdAt?.replace('T', ' ').slice(0, 19) || '',
+      it.title,
+      it.imageCount ? `${it.imageCount} 图` : '',
+    ].filter(Boolean).join(' · ')
+
+    const actions = document.createElement('div')
+    actions.className = 'history-actions'
+    const open = document.createElement('a')
+    open.className = 'link-btn'
+    open.href = `/?history=${it.id}`
+    open.textContent = '打开'
+    const del = document.createElement('button')
+    del.type = 'button'
+    del.className = 'link-btn'
+    del.textContent = '删除'
+    del.addEventListener('click', async () => {
+      if (!confirm(`删除「${it.title}」？相关图片若不再被引用也会删掉。`)) return
+      const r = await fetch(`/api/history/${it.id}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        alert(j.error || '删除失败')
+        return
+      }
+      await loadHistory()
+    })
+    actions.append(open, del)
+    li.append(meta, actions)
+    el.historyList.appendChild(li)
+  }
+}
+
 async function boot() {
   const res = await fetch('/api/me', { credentials: 'same-origin' })
   if (res.status === 401) {
@@ -25,6 +78,8 @@ async function boot() {
   const data = await res.json()
   el.whoami.textContent = data.user?.username || ''
   el.quotaText.textContent = quotaLabel(data.quota)
+
+  await loadHistory()
 
   const usageRes = await fetch('/api/me/usage?limit=50', { credentials: 'same-origin' })
   const usageData = await usageRes.json()

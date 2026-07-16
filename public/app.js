@@ -547,12 +547,18 @@ el.convertBtn.addEventListener('click', async () => {
           markdown: text,
           imageUrls: uploaded.map((u) => u.url),
           style: currentStyle(),
+          save: true,
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || '预览失败')
       applyResult(data, { fromMarkdown: true })
-      setStatus('Markdown 已锁定。下面可随意换主题 / 字体，不会调用 AI。')
+      let msg = 'Markdown 已锁定并保存到历史。下面可随意换主题 / 字体，不会调用 AI。'
+      if (data.history?.removed?.length) {
+        const t = data.history.removed.map((r) => r.title).join('、')
+        msg += `（已满 ${data.history.limit} 条，已删除最早：${t}）`
+      }
+      setStatus(msg)
       el.resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
     catch (e) {
@@ -601,9 +607,12 @@ el.convertBtn.addEventListener('click', async () => {
       ?? ((data.usage?.prompt_tokens || 0) + (data.usage?.completion_tokens || 0))
     const cost = data.estimatedCost || ''
     const retryHint = data.retries ? `，含 ${data.retries} 次自动重试` : ''
-    setStatus(
-      `整理完成并锁定。本次约 ${tokens || '—'} tokens，参考 ${cost || '—'}（本站不扣费${retryHint}）。换主题不再调 AI。`,
-    )
+    let msg = `整理完成并已保存历史。本次约 ${tokens || '—'} tokens，参考 ${cost || '—'}（本站不扣费${retryHint}）。换主题不再调 AI。`
+    if (data.history?.removed?.length) {
+      const t = data.history.removed.map((r) => r.title).join('、')
+      msg += ` 已满 ${data.history.limit} 条，已删除最早：${t}。`
+    }
+    setStatus(msg)
     el.resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
   catch (e) {
@@ -747,6 +756,41 @@ async function boot() {
   el.justifyToggle.checked = Boolean(d.justify)
 
   await refreshMe()
+
+  const historyId = Number(new URLSearchParams(location.search).get('history') || 0)
+  if (historyId && me?.user) {
+    try {
+      const res = await fetch(`/api/history/${historyId}`, { credentials: 'same-origin' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || '无法打开历史')
+      const art = data.article
+      setInputMode('markdown')
+      el.text.value = art.markdown || ''
+      lastMarkdown = art.markdown || ''
+      lastImages = art.images || []
+      uploaded = (art.images || []).map((img) => ({
+        filename: String(img.url || '').split('/').pop() || '',
+        url: img.url,
+      }))
+      renderThumbs()
+      if (art.style) {
+        selectedTheme = art.style.theme || selectedTheme
+        selectedColor = art.style.primaryColor || selectedColor
+        selectedFont = art.style.fontFamily || selectedFont
+        selectedSize = art.style.fontSize || selectedSize
+        el.indentToggle.checked = Boolean(art.style.indent)
+        el.justifyToggle.checked = Boolean(art.style.justify)
+      }
+      renderAllChoices()
+      await restyleNow()
+      setStatus(`已打开历史：${art.title || ''}`)
+      history.replaceState({}, '', '/')
+      return
+    }
+    catch (e) {
+      setStatus(e.message || '打开历史失败', true)
+    }
+  }
 
   const draft = loadDraft()
   if (draft?.inputMode) setInputMode(draft.inputMode)

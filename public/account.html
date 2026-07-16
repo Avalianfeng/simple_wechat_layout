@@ -20,8 +20,15 @@
     </section>
 
     <section class="card">
+      <h2 class="section-title">文章历史</h2>
+      <p class="hint tiny">最多保存 <span id="historyLimit">10</span> 篇；超出将自动删除最早的，并清理对应图片。</p>
+      <ul id="historyList" class="usage-list"></ul>
+      <p id="historyEmpty" class="hint" hidden>还没有保存的文章。</p>
+    </section>
+
+    <section class="card">
       <h2 class="section-title">用量记录</h2>
-      <p class="hint tiny">仅作参考展示，本站不扣费。花费按 DeepSeek 公开价估算。</p>
+      <p class="hint tiny">仅作参考展示，本站不扣费。花费按 DeepSeek 公开价（含缓存命中）估算。</p>
       <ul id="usageList" class="usage-list"></ul>
       <p id="usageEmpty" class="hint" hidden>还没有整理记录。</p>
     </section>

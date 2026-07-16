@@ -10,7 +10,7 @@ import {
 import { renderMarkdownToHtml, extractImages, annotatePreviewHtml } from './render.js'
 import { mergeImageUrls } from './markdown-utils.js'
 import { getTextLimits } from './text-limits.js'
-import { uploadMiddleware, uploadsDir } from './upload.js'
+import { uploadMiddleware, uploadsDir, recordUploads } from './upload.js'
 import {
   normalizeStyle,
   listThemesPublic,
@@ -39,17 +39,27 @@ import {
   listUsageForUser,
   formatYuanFromLi,
   estimateCostLi,
+  migrateUsageCostPrecision,
   estimateChunks,
   getTokenPrices,
   getQuotaState,
 } from './usage.js'
 import { requireAdmin, listUsersAdmin, patchUserAdmin, getAdminToken } from './admin.js'
+import {
+  saveArticleHistory,
+  listArticles,
+  getArticle,
+  deleteArticle,
+  historyLimit,
+  countArticles,
+} from './history.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const publicDir = path.join(__dirname, '..', 'public')
 const PORT = Number(process.env.PORT) || 3080
 
 initDb()
+migrateUsageCostPrecision()
 
 const app = express()
 app.use(express.json({ limit: '2mb' }))
@@ -172,6 +182,7 @@ app.get('/api/options', (_req, res) => {
       maxTimeoutMs: limits.maxTimeoutMs,
     },
     defaultDailyAiLimit: defaultDailyAiLimit(),
+    historyLimit: historyLimit(),
     register: {
       inviteRequired: Boolean(getRegisterInviteCode()),
       perIpPerDay: registerPerIpPerDay(),
@@ -260,6 +271,7 @@ app.post('/api/upload', requireUser, (req, res) => {
       res.status(400).json({ error: '请选择图片' })
       return
     }
+    recordUploads(req.user.id, files.map((f) => f.filename))
     const base = publicBase(req)
     const items = files.map((f) => ({
       filename: f.filename,
@@ -310,6 +322,8 @@ app.post('/api/convert', requireUser, async (req, res) => {
       userId,
       promptTokens: converted.usage?.prompt_tokens,
       completionTokens: converted.usage?.completion_tokens,
+      promptCacheHitTokens: converted.usage?.prompt_cache_hit_tokens,
+      promptCacheMissTokens: converted.usage?.prompt_cache_miss_tokens,
       textChars: text.length,
       chunks: converted.chunks,
       retries: converted.retries,
@@ -317,6 +331,12 @@ app.post('/api/convert', requireUser, async (req, res) => {
     })
     const result = buildResult(converted.markdown, style)
     const quota = getQuotaState(req.user)
+    const history = saveArticleHistory({
+      userId,
+      markdown: converted.markdown,
+      style,
+      images: result.images,
+    })
     console.log('[api/convert] done', {
       ms: Date.now() - started,
       userId,
@@ -332,6 +352,7 @@ app.post('/api/convert', requireUser, async (req, res) => {
       retries: converted.retries,
       estimatedCost: cost.estimatedCost,
       quota,
+      history,
     })
   }
   catch (e) {
@@ -339,6 +360,8 @@ app.post('/api/convert', requireUser, async (req, res) => {
       userId,
       promptTokens: e.usage?.prompt_tokens,
       completionTokens: e.usage?.completion_tokens,
+      promptCacheHitTokens: e.usage?.prompt_cache_hit_tokens,
+      promptCacheMissTokens: e.usage?.prompt_cache_miss_tokens,
       textChars: text.length,
       chunks: e.chunks || estimateChunks(text.length),
       retries: e.retries || 0,
@@ -374,13 +397,14 @@ app.post('/api/convert', requireUser, async (req, res) => {
   }
 })
 
-/** 已有 Markdown，仅渲染（不调 AI） */
+/** 已有 Markdown，仅渲染（不调 AI）；save=true 时写入历史 */
 app.post('/api/render', requireUser, (req, res) => {
   try {
     let markdown = typeof req.body?.markdown === 'string' ? req.body.markdown : ''
     const imageUrls = Array.isArray(req.body?.imageUrls)
       ? req.body.imageUrls.filter((u) => typeof u === 'string' && u.trim())
       : []
+    const shouldSave = Boolean(req.body?.save)
 
     if (!markdown.trim() && imageUrls.length === 0) {
       res.status(400).json({ error: '请先粘贴 Markdown，或上传图片' })
@@ -390,12 +414,22 @@ app.post('/api/render', requireUser, (req, res) => {
     markdown = mergeImageUrls(markdown, imageUrls)
     const style = normalizeStyle(req.body?.style || req.body)
     const result = buildResult(markdown, style)
+    let history = null
+    if (shouldSave) {
+      history = saveArticleHistory({
+        userId: req.user.id,
+        markdown,
+        style,
+        images: result.images,
+      })
+    }
     console.log('[api/render] ok', {
       userId: req.user.id,
       theme: style.theme,
       markdownChars: markdown.length,
+      saved: shouldSave,
     })
-    res.json(result)
+    res.json({ ...result, history })
   }
   catch (e) {
     console.error('[api/render] fail', {
@@ -403,6 +437,44 @@ app.post('/api/render', requireUser, (req, res) => {
       chain: describeErrorChain(e),
     })
     res.status(500).json({ error: e.message || '渲染失败' })
+  }
+})
+
+app.get('/api/history', requireUser, (req, res) => {
+  res.json({
+    items: listArticles(req.user.id),
+    limit: historyLimit(),
+    count: countArticles(req.user.id),
+  })
+})
+
+app.get('/api/history/:id', requireUser, (req, res) => {
+  const id = Number(req.params.id)
+  if (!Number.isInteger(id) || id < 1) {
+    res.status(400).json({ error: '无效 id' })
+    return
+  }
+  const article = getArticle(req.user.id, id)
+  if (!article) {
+    res.status(404).json({ error: '记录不存在', code: 'NOT_FOUND' })
+    return
+  }
+  res.json({ article })
+})
+
+app.delete('/api/history/:id', requireUser, (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    if (!Number.isInteger(id) || id < 1) {
+      res.status(400).json({ error: '无效 id' })
+      return
+    }
+    const result = deleteArticle(req.user.id, id)
+    res.json(result)
+  }
+  catch (e) {
+    const status = e.code === 'NOT_FOUND' ? 404 : 400
+    res.status(status).json({ error: e.message || '删除失败', code: e.code || 'UNKNOWN' })
   }
 })
 
