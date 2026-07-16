@@ -32,5 +32,9 @@ node_modules/
 data/uploads/*
 !data/uploads/.gitkeep
 
+# 本地部署快照 / 密钥（勿提交）
+SERVER_STATUS.local.md
+*.local.md
+
 # node_modules
 node_modules/
