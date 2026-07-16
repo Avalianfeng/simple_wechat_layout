@@ -56,7 +56,7 @@ npm start
 4. **追加** Caddy 站点块（勿整文件覆盖）：
 
 ```caddyfile
-layout.cylf.me {
+wxlayout.cylf.me {
     reverse_proxy layout:3080
 }
 ```
