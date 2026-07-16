@@ -48,13 +48,15 @@ npm start
 ## API（摘要）
 
 - `POST /api/auth/register|login|logout|password` — 账号
-- `GET /api/me`、`GET /api/me/usage` — 当前用户与用量
+- `GET /api/me`、`GET /api/me/usage` — 当前用户、用量明细与累计汇总
 - `GET|DELETE /api/history`、`GET /api/history/:id` — 文章历史
 - `GET /api/options` — 主题 / 配色 / 限额说明
 - `POST /api/upload` — 需登录
 - `POST /api/convert` — 需登录 + 日额度；返回 usage / 参考花费，并写入历史
 - `POST /api/render` — 需登录；换肤不调 AI；`save=true` 时写入历史
-- `GET|PATCH /api/admin/users` — 管理（`X-Admin-Token`）
+- `GET /api/admin/overview` — 限额与今日概况
+- `GET /api/admin/ips`、`POST|DELETE /api/admin/ips/ban` — 注册 IP 与封禁
+- `GET|PATCH /api/admin/users`、`GET /api/admin/users/:id/usage` — 用户与明细
 - `GET /api/health` — 健康检查（含 DeepSeek 探测）
 
 `style` 字段：`{ theme, primaryColor, fontFamily, fontSize, indent, justify }`

@@ -1,6 +1,7 @@
 const el = {
   whoami: document.getElementById('whoami'),
   quotaText: document.getElementById('quotaText'),
+  usageSummaryText: document.getElementById('usageSummaryText'),
   usageList: document.getElementById('usageList'),
   usageEmpty: document.getElementById('usageEmpty'),
   historyList: document.getElementById('historyList'),
@@ -17,6 +18,16 @@ function quotaLabel(q) {
   if (!q?.aiEnabled) return 'AI 整理未开通，可用「已有 Markdown」排版。'
   if (q.unlimited) return `不限次数 · 今日已用 ${q.usedToday} 次`
   return `今日已用 ${q.usedToday} / ${q.dailyAiLimit} 次 · 剩余 ${q.remainingToday} 次`
+}
+
+function summaryLabel(s) {
+  if (!s) return '—'
+  return [
+    `成功 ${s.okCount || 0} 次`,
+    `失败 ${s.failCount || 0} 次`,
+    `合计 ${(s.totalTokens || 0).toLocaleString()} tokens`,
+    `参考花费 ${s.totalEstimatedCost || '¥0'}`,
+  ].join(' · ')
 }
 
 async function loadHistory() {
@@ -78,11 +89,15 @@ async function boot() {
   const data = await res.json()
   el.whoami.textContent = data.user?.username || ''
   el.quotaText.textContent = quotaLabel(data.quota)
+  el.usageSummaryText.textContent = summaryLabel(data.usageSummary)
 
   await loadHistory()
 
   const usageRes = await fetch('/api/me/usage?limit=50', { credentials: 'same-origin' })
   const usageData = await usageRes.json()
+  if (usageData.summary) {
+    el.usageSummaryText.textContent = summaryLabel(usageData.summary)
+  }
   const items = usageData.items || []
   el.usageList.innerHTML = ''
   if (!items.length) {

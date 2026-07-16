@@ -32,6 +32,7 @@ import {
   clearSessionCookie,
   requireUser,
   publicUser,
+  assertIpNotBanned,
 } from './auth.js'
 import {
   assertCanConvert,
@@ -43,8 +44,19 @@ import {
   estimateChunks,
   getTokenPrices,
   getQuotaState,
+  summarizeUsageForUser,
 } from './usage.js'
-import { requireAdmin, listUsersAdmin, patchUserAdmin, getAdminToken } from './admin.js'
+import {
+  requireAdmin,
+  listUsersAdmin,
+  patchUserAdmin,
+  getAdminToken,
+  getAdminOverview,
+  listIpsAdmin,
+  banIp,
+  unbanIp,
+  listUserUsageAdmin,
+} from './admin.js'
 import {
   saveArticleHistory,
   listArticles,
@@ -102,6 +114,7 @@ function mePayload(user) {
     user: publicUser(user),
     quota: getQuotaState(user),
     prices: getTokenPrices(),
+    usageSummary: summarizeUsageForUser(user.id),
   }
 }
 
@@ -210,7 +223,7 @@ app.post('/api/auth/register', (req, res) => {
   }
   catch (e) {
     const status = e.code === 'USERNAME_TAKEN' ? 409
-      : e.code === 'REGISTER_IP_LIMIT' ? 429
+      : e.code === 'REGISTER_IP_LIMIT' || e.code === 'IP_BANNED' ? 429
         : e.code === 'BAD_INVITE' || e.code === 'BAD_USERNAME' || e.code === 'BAD_PASSWORD' ? 400
           : 400
     res.status(status).json({ error: e.message || '注册失败', code: e.code || 'UNKNOWN' })
@@ -219,13 +232,15 @@ app.post('/api/auth/register', (req, res) => {
 
 app.post('/api/auth/login', (req, res) => {
   try {
-    const user = loginUser(req.body?.username, req.body?.password)
+    const user = loginUser(req.body?.username, req.body?.password, {
+      ip: clientIp(req),
+    })
     const session = createSession(user.id)
     setSessionCookie(res, session.token, session.expiresAt)
     res.json(mePayload(user))
   }
   catch (e) {
-    const status = e.code === 'DISABLED' ? 403 : 401
+    const status = e.code === 'DISABLED' || e.code === 'IP_BANNED' ? 403 : 401
     res.status(status).json({ error: e.message || '登录失败', code: e.code || 'UNKNOWN' })
   }
 })
@@ -257,6 +272,7 @@ app.get('/api/me/usage', requireUser, (req, res) => {
   res.json({
     items: listUsageForUser(req.user.id, { limit, offset }),
     quota: getQuotaState(req.user),
+    summary: summarizeUsageForUser(req.user.id),
   })
 })
 
@@ -296,10 +312,11 @@ app.post('/api/convert', requireUser, async (req, res) => {
   }
 
   try {
+    assertIpNotBanned(clientIp(req))
     assertCanConvert(req.user)
   }
   catch (e) {
-    const status = e.code === 'QUOTA_EXCEEDED' || e.code === 'QUOTA_ZERO' || e.code === 'AI_DISABLED'
+    const status = e.code === 'QUOTA_EXCEEDED' || e.code === 'QUOTA_ZERO' || e.code === 'AI_DISABLED' || e.code === 'IP_BANNED'
       ? 403
       : 401
     res.status(status).json({ error: e.message, code: e.code, quota: getQuotaState(req.user) })
@@ -480,8 +497,53 @@ app.delete('/api/history/:id', requireUser, (req, res) => {
 
 /* ---------- admin ---------- */
 
+app.get('/api/admin/overview', requireAdmin, (_req, res) => {
+  res.json(getAdminOverview())
+})
+
+app.get('/api/admin/ips', requireAdmin, (_req, res) => {
+  res.json(listIpsAdmin())
+})
+
+app.post('/api/admin/ips/ban', requireAdmin, (req, res) => {
+  try {
+    const banned = banIp(req.body?.ip, req.body?.reason)
+    res.json({ ban: banned, ips: listIpsAdmin() })
+  }
+  catch (e) {
+    res.status(400).json({ error: e.message || '封禁失败', code: e.code || 'UNKNOWN' })
+  }
+})
+
+app.delete('/api/admin/ips/ban', requireAdmin, (req, res) => {
+  try {
+    const ip = req.body?.ip || req.query?.ip
+    unbanIp(String(ip || ''))
+    res.json({ ok: true, ips: listIpsAdmin() })
+  }
+  catch (e) {
+    const status = e.code === 'NOT_FOUND' ? 404 : 400
+    res.status(status).json({ error: e.message || '解封失败', code: e.code || 'UNKNOWN' })
+  }
+})
+
 app.get('/api/admin/users', requireAdmin, (_req, res) => {
   res.json({ users: listUsersAdmin() })
+})
+
+app.get('/api/admin/users/:id/usage', requireAdmin, (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    if (!Number.isInteger(id) || id < 1) {
+      res.status(400).json({ error: '无效用户 id' })
+      return
+    }
+    res.json(listUserUsageAdmin(id, { limit: Number(req.query.limit) || 30 }))
+  }
+  catch (e) {
+    const status = e.code === 'NOT_FOUND' ? 404 : 400
+    res.status(status).json({ error: e.message || '查询失败', code: e.code || 'UNKNOWN' })
+  }
 })
 
 app.patch('/api/admin/users/:id', requireAdmin, (req, res) => {

@@ -10,8 +10,8 @@
   <main class="page">
     <header class="header">
       <p class="tiny"><a href="/">← 返回排版</a></p>
-      <h1>用户管理</h1>
-      <p class="subtitle">用 ADMIN_TOKEN 登录。可设日额度，或勾选「不限」。</p>
+      <h1>管理后台</h1>
+      <p class="subtitle">限额总览、用户额度、注册 IP 与封禁。</p>
     </header>
 
     <section class="card" id="loginCard">
@@ -21,30 +21,85 @@
       <p id="adminLoginStatus" class="status" role="status"></p>
     </section>
 
-    <section class="card" id="usersCard" hidden>
+    <div id="adminApp" hidden>
       <div class="admin-toolbar">
         <button type="button" id="refreshBtn" class="btn btn-secondary">刷新</button>
         <button type="button" id="adminLogoutBtn" class="btn btn-secondary">退出管理</button>
       </div>
-      <div class="table-wrap">
-        <table class="admin-table" id="usersTable">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>用户名</th>
-              <th>AI</th>
-              <th>日额度</th>
-              <th>今日</th>
-              <th>累计参考花费</th>
-              <th>状态</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
       <p id="adminStatus" class="status" role="status"></p>
-    </section>
+
+      <section class="card" id="overviewCard">
+        <h2 class="section-title">限额与今日概况</h2>
+        <div id="overviewBody" class="admin-overview"></div>
+      </section>
+
+      <section class="card" id="usersCard">
+        <h2 class="section-title">用户</h2>
+        <div class="table-wrap">
+          <table class="admin-table" id="usersTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>用户名</th>
+                <th>注册 IP</th>
+                <th>AI</th>
+                <th>日额度</th>
+                <th>今日</th>
+                <th>累计</th>
+                <th>最近 AI</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div id="userUsagePanel" class="admin-detail" hidden>
+          <h3 class="section-title" id="userUsageTitle">用量明细</h3>
+          <ul id="userUsageList" class="usage-list"></ul>
+          <p id="userUsageEmpty" class="hint" hidden>暂无记录</p>
+        </div>
+      </section>
+
+      <section class="card" id="ipsCard">
+        <h2 class="section-title">注册 IP / 封禁</h2>
+        <p class="hint tiny" id="ipsHint">—</p>
+        <div class="ban-form">
+          <input id="banIpInput" type="text" class="text-input" placeholder="IP 地址" />
+          <input id="banReasonInput" type="text" class="text-input" placeholder="原因（可选）" />
+          <button type="button" id="banIpBtn" class="btn btn-secondary btn-sm">封禁</button>
+        </div>
+        <h3 class="admin-subhead">今日注册</h3>
+        <div class="table-wrap">
+          <table class="admin-table" id="todayIpsTable">
+            <thead>
+              <tr>
+                <th>IP</th>
+                <th>今日注册</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <h3 class="admin-subhead">封禁列表</h3>
+        <div class="table-wrap">
+          <table class="admin-table" id="bansTable">
+            <thead>
+              <tr>
+                <th>IP</th>
+                <th>原因</th>
+                <th>时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="bansEmpty" class="hint" hidden>暂无封禁</p>
+      </section>
+    </div>
   </main>
   <script src="/admin.js" type="module"></script>
 </body>

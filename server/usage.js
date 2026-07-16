@@ -174,6 +174,41 @@ export function migrateUsageCostPrecision() {
       )
     }
     database.exec('PRAGMA user_version = 2')
+    ver = 2
+  }
+
+  if (ver < 3) {
+    if (!tableHasColumn('users', 'register_ip')) {
+      database.exec(`ALTER TABLE users ADD COLUMN register_ip TEXT NOT NULL DEFAULT '';`)
+    }
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS ip_bans (
+        ip TEXT PRIMARY KEY,
+        reason TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `)
+    database.exec('PRAGMA user_version = 3')
+  }
+}
+
+/**
+ * @param {number} userId
+ */
+export function summarizeUsageForUser(userId) {
+  const row = getDb().prepare(`
+    SELECT
+      COALESCE(SUM(CASE WHEN status = 'ok' THEN 1 ELSE 0 END), 0) AS ok_count,
+      COALESCE(SUM(CASE WHEN status = 'fail' THEN 1 ELSE 0 END), 0) AS fail_count,
+      COALESCE(SUM(CASE WHEN status = 'ok' THEN total_tokens ELSE 0 END), 0) AS tokens,
+      COALESCE(SUM(CASE WHEN status = 'ok' THEN est_cost_cents ELSE 0 END), 0) AS cost_micro
+    FROM usage_logs WHERE user_id = ?
+  `).get(userId)
+  return {
+    okCount: Number(row?.ok_count) || 0,
+    failCount: Number(row?.fail_count) || 0,
+    totalTokens: Number(row?.tokens) || 0,
+    totalEstimatedCost: formatYuanFromLi(row?.cost_micro),
   }
 }
 

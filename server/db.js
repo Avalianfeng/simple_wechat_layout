@@ -29,6 +29,7 @@ export function initDb() {
       ai_enabled INTEGER NOT NULL DEFAULT 1,
       daily_ai_limit INTEGER NOT NULL DEFAULT 5,
       status TEXT NOT NULL DEFAULT 'active',
+      register_ip TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -67,6 +68,12 @@ export function initDb() {
       day_key TEXT NOT NULL,
       count INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (ip, day_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS ip_bans (
+      ip TEXT PRIMARY KEY,
+      reason TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS articles (

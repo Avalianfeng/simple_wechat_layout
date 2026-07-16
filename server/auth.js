@@ -7,6 +7,27 @@ const USERNAME_RE = /^[a-zA-Z0-9_]{3,32}$/
 
 export { COOKIE_NAME }
 
+/** @param {string} [ip] */
+export function normalizeIp(ip) {
+  let s = String(ip || '').trim() || 'unknown'
+  if (s.startsWith('::ffff:')) s = s.slice(7)
+  return s
+}
+
+/**
+ * @param {string} ip
+ */
+export function assertIpNotBanned(ip) {
+  const key = normalizeIp(ip)
+  if (!key || key === 'unknown') return
+  const row = getDb().prepare('SELECT ip, reason FROM ip_bans WHERE ip = ?').get(key)
+  if (row) {
+    const err = new Error(row.reason ? `当前网络已被限制：${row.reason}` : '当前网络已被限制，请联系管理员')
+    err.code = 'IP_BANNED'
+    throw err
+  }
+}
+
 export function shanghaiDayKey(date = new Date()) {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Shanghai',
@@ -66,7 +87,8 @@ export function registerUser(username, password, opts = {}) {
     }
   }
 
-  const ip = String(opts.ip || '').trim() || 'unknown'
+  const ip = normalizeIp(opts.ip)
+  assertIpNotBanned(ip)
   const dayKey = shanghaiDayKey()
   const perIp = registerPerIpPerDay()
   const db = getDb()
@@ -91,9 +113,9 @@ export function registerUser(username, password, opts = {}) {
 
   const limit = defaultDailyAiLimit()
   const info = db.prepare(`
-    INSERT INTO users (username, password_hash, ai_enabled, daily_ai_limit, status)
-    VALUES (?, ?, 1, ?, 'active')
-  `).run(name, hashPassword(password), limit)
+    INSERT INTO users (username, password_hash, ai_enabled, daily_ai_limit, status, register_ip)
+    VALUES (?, ?, 1, ?, 'active', ?)
+  `).run(name, hashPassword(password), limit, ip)
 
   if (perIp > 0) {
     db.prepare(`
@@ -108,8 +130,10 @@ export function registerUser(username, password, opts = {}) {
 /**
  * @param {string} username
  * @param {string} password
+ * @param {{ ip?: string }} [opts]
  */
-export function loginUser(username, password) {
+export function loginUser(username, password, opts = {}) {
+  assertIpNotBanned(opts.ip)
   const name = String(username || '').trim()
   const db = getDb()
   const row = db.prepare('SELECT * FROM users WHERE username = ?').get(name)
