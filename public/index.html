@@ -153,6 +153,10 @@
       <input id="authUsername" class="text-input" autocomplete="username" required />
       <label class="label" for="authPassword">密码（至少 8 位）</label>
       <input id="authPassword" type="password" class="text-input" autocomplete="current-password" required />
+      <div id="confirmPasswordField" hidden>
+        <label class="label" for="authPasswordConfirm">确认密码</label>
+        <input id="authPasswordConfirm" type="password" class="text-input" autocomplete="new-password" />
+      </div>
       <div id="inviteField" hidden>
         <label class="label" for="authInvite">邀请码</label>
         <input id="authInvite" class="text-input" autocomplete="off" />

@@ -74,6 +74,8 @@ const el = {
   authTitle: document.getElementById('authTitle'),
   authUsername: document.getElementById('authUsername'),
   authPassword: document.getElementById('authPassword'),
+  authPasswordConfirm: document.getElementById('authPasswordConfirm'),
+  confirmPasswordField: document.getElementById('confirmPasswordField'),
   authInvite: document.getElementById('authInvite'),
   inviteField: document.getElementById('inviteField'),
   authError: document.getElementById('authError'),
@@ -459,9 +461,14 @@ function openAuth(mode = 'login') {
   el.authTitle.textContent = authMode === 'register' ? '注册' : '登录'
   el.authSubmit.textContent = authMode === 'register' ? '注册并登录' : '登录'
   el.authError.hidden = true
+  const isRegister = authMode === 'register'
+  el.confirmPasswordField.hidden = !isRegister
+  el.authPasswordConfirm.required = isRegister
+  el.authPasswordConfirm.value = ''
+  el.authPassword.autocomplete = isRegister ? 'new-password' : 'current-password'
   const needInvite = Boolean(options.register?.inviteRequired)
-  el.inviteField.hidden = !(authMode === 'register' && needInvite)
-  if (el.authInvite) el.authInvite.required = authMode === 'register' && needInvite
+  el.inviteField.hidden = !(isRegister && needInvite)
+  if (el.authInvite) el.authInvite.required = isRegister && needInvite
   el.authDialog.showModal()
 }
 
@@ -665,6 +672,11 @@ el.authTabs.forEach((btn) => {
 el.authForm.addEventListener('submit', async (ev) => {
   ev.preventDefault()
   el.authError.hidden = true
+  if (authMode === 'register' && el.authPassword.value !== el.authPasswordConfirm.value) {
+    el.authError.textContent = '两次输入的密码不一致'
+    el.authError.hidden = false
+    return
+  }
   const path = authMode === 'register' ? '/api/auth/register' : '/api/auth/login'
   try {
     const res = await fetch(path, {
@@ -682,6 +694,7 @@ el.authForm.addEventListener('submit', async (ev) => {
     applyMe(data)
     el.authDialog.close()
     el.authPassword.value = ''
+    el.authPasswordConfirm.value = ''
     setStatus(authMode === 'register' ? '注册成功，可以开始写文章了。' : '已登录。')
   }
   catch (e) {
