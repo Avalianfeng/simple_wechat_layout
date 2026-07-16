@@ -1,0 +1,33 @@
+/**
+ * 精简自 doocs/md base — 适配微信内联样式（避免依赖复杂选择器）
+ */
+.article {
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 16px;
+  line-height: 1.75;
+  color: #333;
+  text-align: left;
+  word-break: break-word;
+}
+
+.article > *:first-child {
+  margin-top: 0 !important;
+}
+
+.article blockquote {
+  margin-left: 0;
+  margin-right: 0;
+  margin-top: 0;
+}
+
+.article table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.article img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1em auto;
+}

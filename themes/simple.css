@@ -1,0 +1,124 @@
+/**
+ * 精简自 doocs/md simple 主题 — 用具体颜色值，便于 juice 内联与微信兼容
+ */
+.article h1 {
+  padding: 0.5em 1em;
+  font-size: 22px;
+  font-weight: bold;
+  color: #07c160;
+  text-align: center;
+  margin: 1.2em 0 0.8em;
+}
+
+.article h2 {
+  padding: 0.3em 1.2em;
+  font-size: 20px;
+  font-weight: bold;
+  color: #07c160;
+  border-radius: 8px 24px 8px 24px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  margin: 1.2em 0 0.8em;
+}
+
+.article h3 {
+  padding-left: 12px;
+  font-size: 18px;
+  font-weight: bold;
+  color: #07c160;
+  border-radius: 6px;
+  line-height: 2.4em;
+  border-left: 4px solid #07c160;
+  border-right: 1px solid rgba(7, 193, 96, 0.1);
+  border-bottom: 1px solid rgba(7, 193, 96, 0.1);
+  border-top: 1px solid rgba(7, 193, 96, 0.1);
+  background: rgba(7, 193, 96, 0.08);
+  margin: 1em 0 0.6em;
+}
+
+.article h4,
+.article h5,
+.article h6 {
+  font-size: 16px;
+  font-weight: bold;
+  color: #07c160;
+  margin: 0.8em 0 0.5em;
+}
+
+.article p {
+  margin: 0 0 1em;
+  letter-spacing: 0.05em;
+}
+
+.article blockquote {
+  font-style: italic;
+  padding: 1em 1em 1em 1.2em;
+  color: rgba(0, 0, 0, 0.6);
+  border-left: 4px solid #07c160;
+  background: #f7f7f7;
+  margin: 1em 0;
+}
+
+.article code {
+  font-family: Menlo, Consolas, Monaco, monospace;
+  font-size: 0.9em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(7, 193, 96, 0.15);
+  background: #f5f5f5;
+}
+
+.article pre {
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  background: #f6f8fa;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+
+.article pre code {
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
+.article img {
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.article ol {
+  padding-left: 1.5em;
+  margin: 0 0 1em;
+}
+
+.article ul {
+  list-style: disc;
+  padding-left: 1.5em;
+  margin: 0 0 1em;
+}
+
+.article li {
+  margin: 0.4em 0;
+}
+
+.article hr {
+  height: 1px;
+  border: none;
+  margin: 2em 0;
+  background: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0));
+}
+
+.article em {
+  font-style: italic;
+}
+
+.article strong {
+  font-weight: bold;
+  color: #222;
+}
+
+.article a {
+  color: #576b95;
+  text-decoration: none;
+}

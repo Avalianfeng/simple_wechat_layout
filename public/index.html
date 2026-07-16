@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>公众号排版助手</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="page">
+    <header class="header">
+      <h1>公众号排版助手</h1>
+      <p class="subtitle">写好文字 → 点一下整理 → 复制到微信后台</p>
+    </header>
+
+    <section class="card">
+      <label class="label" for="text">把文章写在这里</label>
+      <textarea
+        id="text"
+        rows="12"
+        placeholder="直接敲字就行，不用管格式。有标题、段落也可以一起贴进来。"
+      ></textarea>
+
+      <div class="images-block">
+        <div class="images-head">
+          <span class="label">可加点图片（可选）</span>
+          <label class="btn btn-secondary btn-file">
+            选择图片
+            <input id="fileInput" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden />
+          </label>
+        </div>
+        <ul id="thumbList" class="thumb-list" hidden></ul>
+      </div>
+
+      <button id="convertBtn" type="button" class="btn btn-primary">整理并预览</button>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section id="resultSection" class="card result" hidden>
+      <div class="result-actions">
+        <button id="copyBtn" type="button" class="btn btn-primary">复制到微信</button>
+      </div>
+      <p id="copyHint" class="hint" hidden></p>
+
+      <h2 class="section-title">预览</h2>
+      <div id="preview" class="preview"></div>
+
+      <div id="insertGuide" class="insert-guide" hidden>
+        <h2 class="section-title">粘贴后请按顺序插入这些图</h2>
+        <p class="hint">微信不能直接用我们网站上的图片链接，需要在公众号后台手动插入。</p>
+        <ol id="insertList" class="insert-list"></ol>
+      </div>
+
+      <details class="advanced">
+        <summary>查看整理后的文字（一般不用看）</summary>
+        <pre id="markdownOut" class="markdown-out"></pre>
+      </details>
+    </section>
+  </main>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

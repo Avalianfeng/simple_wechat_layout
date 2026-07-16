@@ -1,0 +1,33 @@
+# 放到 VPS: /opt/docker/compose/layout/docker-compose.yml
+# 按「新项目上机 SOP」：只进 proxy 网络，不映射公网端口；Caddy 反代。
+#
+# Caddyfile 追加（禁止整文件覆盖）：
+#   layout.cylf.me {
+#       reverse_proxy layout:3080
+#   }
+#
+# Cloudflare: A 记录 layout → 服务器 IP，代理保持 DNS Only（灰云）
+
+services:
+  layout:
+    build: .
+    # 若在 VPS 用预构建镜像，改为 image: ...
+    container_name: layout
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: "3080"
+      PUBLIC_BASE_URL: "https://layout.cylf.me"
+    volumes:
+      - ./data/uploads:/app/data/uploads
+    networks:
+      - proxy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+networks:
+  proxy:
+    external: true
