@@ -2,7 +2,8 @@
 
 极简、可自托管的微信公众号排版助手。给家人用：写字 → 一键整理 → 复制到公众号后台。
 
-**线上**：https://wxlayout.cylf.me（当前部署版本见本地 `SERVER_STATUS.local.md`，该文件不入库）
+**线上**：https://wxlayout.cylf.me
+（当前部署版本见本地 `SERVER_STATUS.local.md`，该文件不入库）
 
 ## 做什么
 
@@ -24,7 +25,7 @@ npm start
 ```
 
 打开 http://127.0.0.1:3080  
-管理后台：http://127.0.0.1:3080/admin.html（填写 `ADMIN_TOKEN`）
+管理后台：http://127.0.0.1:3080/admin.html （填写 `ADMIN_TOKEN`）
 
 给家人「不限次数」：管理后台找到用户 → 勾选「不限」→ 保存。
 
@@ -93,3 +94,10 @@ wxlayout.cylf.me {
 ## 明确不做（当前）
 
 余额充值扣费、收集用户 API Key、微信草稿自动推送。
+
+## 👨‍💻 开发者
+
+- **QQ**：2656927351
+- **wx**：cylf_19956272658
+- **Email**：m19956272658@163.com
+- **GitHub**：https://github.com/Avalianfeng/chat_bot
